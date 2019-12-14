@@ -1,0 +1,3 @@
+[submodule "Source/actiniaria/Private/engine"]
+	path = Source/actiniaria/Private/engine
+	url = https://github.com/nustxujun/hermitcrab.git
