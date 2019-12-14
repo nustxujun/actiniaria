@@ -13,7 +13,10 @@
 
 #include "Model.h"
 
-class Actiniaria :public Framework, public RenderContext
+#define SEARCH_PATH L"D:/workspace/ue4/test/Plugins/actiniaria/Source/actiniaria/Private/engine/"
+
+
+class ActiniariaFrame :public Framework, public RenderContext
 {
 public:
 	std::shared_ptr<ForwardPipeline> pipeline;
@@ -23,9 +26,9 @@ public:
 	ImguiText* fps;
 	std::vector<Model::Ptr> models;
 
-	Actiniaria()
+	ActiniariaFrame()
 	{
-		Renderer::getSingleton()->addSearchPath(L"D:/workspace/ue4/test/Plugins/btn/Source/btn/Private/engine/");
+		Renderer::getSingleton()->addSearchPath(SEARCH_PATH);
 		pipeline = decltype(pipeline)(new ForwardPipeline());
 	}
 

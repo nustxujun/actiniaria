@@ -7,6 +7,8 @@
 #include "Framework/MultiBox/MultiBoxBuilder.h"
 
 #include "LevelEditor.h"
+#include "ActiniariaFrame.h"
+#include <thread>
 
 static const FName actiniariaTabName("actiniaria");
 
@@ -56,13 +58,12 @@ void FactiniariaModule::ShutdownModule()
 
 void FactiniariaModule::PluginButtonClicked()
 {
-	// Put your "OnButtonClicked" stuff here
-	FText DialogText = FText::Format(
-							LOCTEXT("PluginButtonDialogText", "Add code to {0} in {1} to override this button's actions"),
-							FText::FromString(TEXT("FactiniariaModule::PluginButtonClicked()")),
-							FText::FromString(TEXT("actiniaria.cpp"))
-					   );
-	FMessageDialog::Open(EAppMsgType::Ok, DialogText);
+	std::thread thread([]() {
+		ActiniariaFrame frame;
+		frame.init();
+		frame.update();
+	});
+	thread.join();
 }
 
 void FactiniariaModule::AddMenuExtension(FMenuBuilder& Builder)
