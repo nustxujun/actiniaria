@@ -19,17 +19,16 @@
 class ActiniariaFrame :public Framework, public RenderContext
 {
 public:
-	std::shared_ptr<ForwardPipeline> pipeline;
+	std::shared_ptr<DefaultPipeline> pipeline;
 	Renderer::PipelineState::Ref pso;
 	Renderer::Buffer::Ptr vertices;
 	Renderer::Texture::Ref tex;
-	ImguiText* fps;
 	std::vector<Model::Ptr> models;
 
 	ActiniariaFrame()
 	{
 		Renderer::getSingleton()->addSearchPath(SEARCH_PATH);
-		pipeline = decltype(pipeline)(new ForwardPipeline());
+		pipeline = decltype(pipeline)(new DefaultPipeline());
 	}
 
 	void iterateObjects()
@@ -98,8 +97,6 @@ public:
 
 		pso = renderer->createPipelineState(shaders, rs, rootparams);
 
-		auto mainbar = ImguiObject::root()->createChild<ImguiMenuBar>(true);
-		fps = mainbar->createChild<ImguiText>("test");
 	}
 
 	void renderScreen()
@@ -123,7 +120,6 @@ public:
 			std::stringstream ss;
 			ss.precision(4);
 			ss << history;
-			fps->text = ss.str();
 		}
 
 		pipeline->update();
