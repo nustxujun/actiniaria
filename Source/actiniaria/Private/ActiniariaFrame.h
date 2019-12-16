@@ -13,7 +13,16 @@
 
 #include "Model.h"
 
-#define SEARCH_PATH L"D:/workspace/ue4/test/Plugins/actiniaria/Source/actiniaria/Private/engine/"
+#include "Runtime/Json/Public/Dom/JsonObject.h"
+#include "Runtime/Json/Public/Serialization/JsonReader.h"
+
+inline FString GetPluginPath()
+{
+	FString path = FPaths::Combine(FPaths::ProjectPluginsDir(), TEXT("actiniaria"));
+	if (FPaths::DirectoryExists(path))
+		return path;
+	return  FPaths::Combine(FPaths::EnginePluginsDir(), TEXT("actiniaria"));
+}
 
 
 class ActiniariaFrame :public Framework, public RenderContext
@@ -27,7 +36,9 @@ public:
 
 	ActiniariaFrame()
 	{
-		Renderer::getSingleton()->addSearchPath(SEARCH_PATH);
+		FString path = GetPluginPath() + "/Source/actiniaria/Private/engine/";
+
+		Renderer::getSingleton()->addSearchPath(*path);
 		pipeline = decltype(pipeline)(new DefaultPipeline());
 	}
 
@@ -60,7 +71,8 @@ public:
 			auto actor = *iter;
 			auto component = actor->GetStaticMeshComponent();
 			auto mesh = component->GetStaticMesh();
-
+			if (mesh == nullptr )
+				continue;
 			StaticMesh::Ptr dstMesh;
 			auto ret = meshs.find(mesh->GetName());
 			if (ret != meshs.end())
