@@ -46,7 +46,7 @@ public:
 	{
 		{
 			auto camIter = TObjectIterator<ACameraActor>();
-			Common::Assert(!!camIter, L"need camera");
+			Common::Assert(!!camIter, "need camera");
 			auto camact = *camIter;
 			auto camcom = camact->GetCameraComponent();
 			FMinimalViewInfo info;
@@ -141,7 +141,6 @@ public:
 	{
 		auto cmdlist = Renderer::getSingleton()->getCommandList();
 
-		cmdlist->setPipelineState(pso);
 		const auto& vp = cam->getViewport();
 		cmdlist->setViewport(vp);
 		cmdlist->setScissorRect({0,0, (LONG)vp.Width, (LONG)vp.Height});
@@ -157,6 +156,8 @@ public:
 		transform.view = cam->getViewMatrix();
 		transform.proj = cam->getProjectionMatrix();
 
+
+
 		for (auto& m : models)
 		{
 			const auto& mesh = m->getMesh();
@@ -167,7 +168,10 @@ public:
 			cmdlist->setIndexBuffer(indices);
 
 			transform.world = *(Matrix*)&m->getTransform();
-			cmdlist->set32BitConstants(0,16  * 3,&transform,0);
+			//cmdlist->set32BitConstants(0,16  * 3,&transform,0);
+
+			pso->setVSConstant("Constant", &transform);
+			cmdlist->setPipelineState(pso);
 
 			auto numIndices = indices->getSize() / indices->getStride();
 			cmdlist->drawIndexedInstanced(numIndices,1);
