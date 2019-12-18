@@ -16,6 +16,8 @@
 #include "Runtime/Json/Public/Dom/JsonObject.h"
 #include "Runtime/Json/Public/Serialization/JsonReader.h"
 
+#include <iostream>
+
 inline FString GetPluginPath()
 {
 	FString path = FPaths::Combine(FPaths::ProjectPluginsDir(), TEXT("actiniaria"));
@@ -25,7 +27,7 @@ inline FString GetPluginPath()
 }
 
 
-class ActiniariaFrame :public Framework, public RenderContext
+class ActiniariaFrame :public RenderContext, public Framework
 {
 public:
 	std::shared_ptr<DefaultPipeline> pipeline;
@@ -36,10 +38,23 @@ public:
 
 	ActiniariaFrame()
 	{
+		if (!::AllocConsole())
+		{
+			Common::checkResult(GetLastError(), " init actiniaria");
+		}
+		else
+		{
+			freopen("CONOUT$", "w", stdout);
+			std::cout << "console started." << std::endl;
+		}
 		FString path = GetPluginPath() + "/Source/actiniaria/Private/engine/";
 
 		Renderer::getSingleton()->addSearchPath(*path);
 		pipeline = decltype(pipeline)(new DefaultPipeline());
+	}
+
+	~ActiniariaFrame()
+	{
 	}
 
 	void iterateObjects()
@@ -55,12 +70,62 @@ public:
 			const auto& vp = maincamera->getViewport();
 
 			info.FOV = vp.Width / vp.Height;
-			auto proj = info.CalculateProjectionMatrix();
-			auto view = camact->GetTransform().Inverse().ToMatrixNoScale();
+
+			std::cout << "FOV: " << info.FOV << std::endl;
+			
+			FMatrix proj;
+			{
+				float FarZ = 1000;
+				float NearZ = 0.1f;
+				float halfFov = info.FOV * 0.5f;
+				float SinFov = std::sin(halfFov);
+				float CosFov = std::cos(halfFov);
+
+				float Height = CosFov / SinFov;
+				float Width = 1.0f / info.AspectRatio;
+				float fRange = FarZ / (FarZ - NearZ);
+
+				FMatrix M;
+				M.M[0][0] = Width;
+				M.M[0][1] = 0.0f;
+				M.M[0][2] = 0.0f;
+				M.M[0][3] = 0.0f;
+
+				M.M[1][0] = 0.0f;
+				M.M[1][1] = Height;
+				M.M[1][2] = 0.0f;
+				M.M[1][3] = 0.0f;
+
+				M.M[2][0] = 0.0f;
+				M.M[2][1] = 0.0f;
+				M.M[2][2] = fRange;
+				M.M[2][3] = 1.0f;
+
+				M.M[3][0] = 0.0f;
+				M.M[3][1] = 0.0f;
+				M.M[3][2] = -fRange * NearZ;
+				M.M[3][3] = 0.0f;
+		
+				proj = M.GetTransposed();
+			}
+
+			//auto proj = FMatrix::Identity;
+
+			auto rot = camact->GetTransform().GetRotation();
+			
+			rot = rot.Inverse();
+			FTransform transform;
+			transform.SetRotation(rot);
+			auto l = camact->GetTransform().GetLocation();
+			transform.SetLocation(rot*l);
+			auto view = transform.ToMatrixNoScale().GetTransposed();
 
 			maincamera->setProjectionMatrix(*(Matrix*)&proj);
 			maincamera->setViewMatrix(*(Matrix*)&view);
 			
+			FVector4 pos(0,0,0,1);
+			pos = view.TransformFVector4(pos);
+			pos = proj.TransformFVector4(pos);
 
 		}
 
@@ -169,7 +234,8 @@ public:
 			cmdlist->setVertexBuffer(vertices);
 			cmdlist->setIndexBuffer(indices);
 
-			transform.world = *(Matrix*)&m->getTransform();
+			auto mat = m->getTransform().GetTransposed();
+			transform.world = *(Matrix*)&mat;
 			//cmdlist->set32BitConstants(0,16  * 3,&transform,0);
 
 			pso->setVSConstant("Constant", &transform);
