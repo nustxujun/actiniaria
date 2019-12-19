@@ -27,6 +27,16 @@ inline FString GetPluginPath()
 }
 
 
+inline FMatrix convertMatrix(const FMatrix& m)
+{
+	FMatrix o = FMatrix::Identity;
+	o.M[0][0] = m.M[1][1]; o.M[0][1] = m.M[1][2]; o.M[0][2] = m.M[1][0];
+	o.M[1][0] = m.M[2][1]; o.M[1][1] = m.M[2][2]; o.M[1][2] = m.M[2][0];
+	o.M[2][0] = m.M[0][1]; o.M[2][1] = m.M[0][2]; o.M[2][2] = m.M[0][0];
+	o.M[3][0] = m.M[3][1]; o.M[3][1] = m.M[3][2]; o.M[3][2] = m.M[3][0];
+	return o;
+}
+
 class ActiniariaFrame :public RenderContext, public Framework
 {
 public:
@@ -111,21 +121,20 @@ public:
 
 			//auto proj = FMatrix::Identity;
 
-			auto rot = camact->GetTransform().GetRotation();
-			
-			rot = rot.Inverse();
-			FTransform transform;
-			transform.SetRotation(rot);
-			auto l = camact->GetTransform().GetLocation();
-			transform.SetLocation(rot*l);
-			auto view = transform.ToMatrixNoScale().GetTransposed();
+			auto rot = camact->GetTransform().GetRotation().Rotator();
+			FMatrix ViewPlanesMatrix = FMatrix(
+				FPlane(0, 0, 1, 0),
+				FPlane(1, 0, 0, 0),
+				FPlane(0, 1, 0, 0),
+				FPlane(0, 0, 0, 1));
+			auto rotmat = FInverseRotationMatrix(rot) * ViewPlanesMatrix;
 
+			auto view = FTranslationMatrix(-camact->GetTransform().GetLocation()) * rotmat;
+			//view = convertMatrix(view);
+			view = view.GetTransposed();
 			maincamera->setProjectionMatrix(*(Matrix*)&proj);
 			maincamera->setViewMatrix(*(Matrix*)&view);
-			
-			FVector4 pos(0,0,0,1);
-			pos = view.TransformFVector4(pos);
-			pos = proj.TransformFVector4(pos);
+	
 
 		}
 
@@ -235,8 +244,8 @@ public:
 			cmdlist->setIndexBuffer(indices);
 
 			auto mat = m->getTransform().GetTransposed();
+			//auto mat = FMatrix::Identity;
 			transform.world = *(Matrix*)&mat;
-			//cmdlist->set32BitConstants(0,16  * 3,&transform,0);
 
 			pso->setVSConstant("Constant", &transform);
 			cmdlist->setPipelineState(pso);
