@@ -159,6 +159,7 @@ public:
 			auto model = Model::Ptr(new Model());
 			model->setMesh(dstMesh);
 			model->setTramsform(actor->GetTransform().ToMatrixWithScale());
+			model->setCBuffer(pso->createConstantBuffer(Renderer::Shader::ST_VERTEX,"Constant"));
 			models.push_back(model);
 		}
 	}
@@ -166,14 +167,10 @@ public:
 	void init()
 	{
 		auto renderer = Renderer::getSingleton();
-		iterateObjects();
 
 		auto vs = renderer->compileShader(L"shaders/scene_vs.hlsl", L"vs", L"vs_5_0");
 		auto ps = renderer->compileShader(L"shaders/scene_vs.hlsl", L"ps", L"ps_5_0");
 		std::vector<Renderer::Shader::Ptr> shaders = { vs, ps };
-		std::vector<Renderer::RootParameter> rootparams = { D3D12_SHADER_VISIBILITY_PIXEL };
-		rootparams[0].cbv32(0,0,16 * 3);
-
 
 		Renderer::RenderState rs = Renderer::RenderState::Default;
 		rs.setInputLayout({
@@ -181,7 +178,11 @@ public:
 			{ "TEXCOORD", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
 			});
 
-		pso = renderer->createPipelineState(shaders, rs, rootparams);
+		pso = renderer->createPipelineState(shaders, rs);
+
+
+		iterateObjects();
+
 
 	}
 
@@ -221,7 +222,8 @@ public:
 		cmdlist->setViewport(vp);
 		cmdlist->setScissorRect({0,0, (LONG)vp.Width, (LONG)vp.Height});
 		cmdlist->setPrimitiveType();
-		
+		cmdlist->setPipelineState(pso);
+
 
 		struct 
 		{
@@ -246,9 +248,10 @@ public:
 			auto mat = m->getTransform().GetTransposed();
 			//auto mat = FMatrix::Identity;
 			transform.world = *(Matrix*)&mat;
-
-			pso->setVSConstant("Constant", &transform);
-			cmdlist->setPipelineState(pso);
+			auto consts = m->getCBuffer();
+			consts->blit(&transform);
+			pso->setVSConstant("Constant",consts);
+			//pso->setVSConstant("Constant", &transform);
 
 			auto numIndices = indices->getSize() / indices->getStride();
 			cmdlist->drawIndexedInstanced(numIndices,1);
