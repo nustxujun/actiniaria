@@ -58,12 +58,28 @@ void FactiniariaModule::ShutdownModule()
 
 void FactiniariaModule::PluginButtonClicked()
 {
-	std::thread thread([]() {
+	ActiniariaFrame* frame = nullptr;
+	int state = 0;
+	if (mThread)
+		mThread->join();
+	mThread = decltype(mThread){new std::thread([&ref = frame, &state]() {
 		ActiniariaFrame frame;
-		frame.init();
+		ref = &frame;
+		state = 1;
+		while(state != 2)
+			Sleep(1);
 		frame.update();
-	});
-	thread.join();
+	})};
+
+	while(state != 1)
+		Sleep(1);
+	frame->init();
+	state = 2;
+	//mThread->join();
+
+	//ActiniariaFrame frame;
+	//frame.init();
+	//frame.update();
 }
 
 void FactiniariaModule::AddMenuExtension(FMenuBuilder& Builder)

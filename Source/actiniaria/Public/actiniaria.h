@@ -4,6 +4,8 @@
 
 #include "CoreMinimal.h"
 #include "Modules/ModuleManager.h"
+#include <thread>
+#include <functional>
 
 class FToolBarBuilder;
 class FMenuBuilder;
@@ -26,4 +28,5 @@ private:
 
 private:
 	TSharedPtr<class FUICommandList> PluginCommands;
+	std::shared_ptr<std::thread> mThread;
 };
