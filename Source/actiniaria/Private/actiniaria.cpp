@@ -7,7 +7,7 @@
 #include "Framework/MultiBox/MultiBoxBuilder.h"
 
 #include "LevelEditor.h"
-#include "ActiniariaFrame.h"
+#include "IPCFrame.h"
 #include <thread>
 
 static const FName actiniariaTabName("actiniaria");
@@ -58,28 +58,32 @@ void FactiniariaModule::ShutdownModule()
 
 void FactiniariaModule::PluginButtonClicked()
 {
-	ActiniariaFrame* frame = nullptr;
-	int state = 0;
-	if (mThread)
-		mThread->join();
-	mThread = decltype(mThread){new std::thread([&ref = frame, &state]() {
-		ActiniariaFrame frame;
-		ref = &frame;
-		state = 1;
-		while(state != 2)
-			Sleep(1);
-		frame.update();
-	})};
+	//ActiniariaFrame* frame = nullptr;
+	//int state = 0;
+	//if (mThread)
+	//	mThread->join();
+	//mThread = decltype(mThread){new std::thread([&ref = frame, &state]() {
+	//	ActiniariaFrame frame;
+	//	ref = &frame;
+	//	state = 1;
+	//	while(state != 2)
+	//		Sleep(1);
+	//	frame.update();
+	//})};
 
-	while(state != 1)
-		Sleep(1);
-	frame->init();
-	state = 2;
-	//mThread->join();
+	//while(state != 1)
+	//	Sleep(1);
+	//frame->init();
+	//state = 2;
+	//
+	////mThread->join();
 
-	//ActiniariaFrame frame;
-	//frame.init();
-	//frame.update();
+	////ActiniariaFrame frame;
+	////frame.init();
+	////frame.update();
+
+	IPCFrame frame;
+	frame.init();
 }
 
 void FactiniariaModule::AddMenuExtension(FMenuBuilder& Builder)
