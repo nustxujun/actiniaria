@@ -11,8 +11,10 @@ public:
 	IPCFrame();
 	~IPCFrame();
 	void iterateObjects();
+	void iterateLights();
 	void init()
 	{
 		iterateObjects();
+		iterateLights();
 	}
 };

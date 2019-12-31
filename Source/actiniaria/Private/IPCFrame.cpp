@@ -1,6 +1,6 @@
+#include "IPCFrame.h"
 #include "Engine/Common.h"
 #include "Engine/D3DHelper.h"
-#include "IPCFrame.h"
 
 #include "Engine/RenderCommand.h"
 #include "Materials/MaterialInterface.h"
@@ -8,6 +8,9 @@
 #include "Materials/MaterialExpression.h"
 #include "Materials/MaterialExpressionMultiply.h"
 #include "Materials/MaterialExpressionVectorParameter.h"
+
+#include"Engine/Light.h"
+#include"Engine/DirectionalLight.h"
 
 void createMesh(const std::string& name, FStaticMeshRenderData & renderdata)
 {
@@ -17,17 +20,37 @@ void createMesh(const std::string& name, FStaticMeshRenderData & renderdata)
 	auto& positions = mesh.VertexBuffers.PositionVertexBuffer;
 	auto& vertices = mesh.VertexBuffers.StaticMeshVertexBuffer;
 
-	auto vertexstride = (sizeof(FVector) + sizeof(FVector2D));
+	auto vertexstride = (
+		sizeof(FVector) +  // pos
+		sizeof(FVector2D) + //uv
+		sizeof(FVector) +  // normal
+		sizeof(FVector) +  // tangent
+		sizeof(FVector) ); // binormal
 	std::vector<char> vertexData(vertexstride * numVertices);
 	char* data = vertexData.data();
+	auto move = [](char*& data, const auto& value)
+	{
+		memcpy(data, &value, sizeof(value));
+		data += sizeof(value);
+	};
 	for (auto i = 0; i < numVertices; ++i)
 	{
 		const auto& pos = positions.VertexPosition(i);
 		const auto& uv = vertices.GetVertexUV(i, 0);
+		const auto& normal = vertices.VertexTangentZ(i);
+		const auto& tangent = vertices.VertexTangentX(i);
+		const auto& binormal = vertices.VertexTangentY(i);
 
-		memcpy(data, &pos, sizeof(FVector));
-		memcpy(data + sizeof(FVector), &uv, sizeof(FVector2D));
-		data += vertexstride;
+		move(data, pos);
+		move(data, uv);
+		move(data, normal);
+		move(data, tangent);
+		move(data, binormal);
+
+
+		//memcpy(data, &pos, sizeof(FVector));
+		//memcpy(data + sizeof(FVector), &uv, sizeof(FVector2D));
+		//data += vertexstride;
 	}
 
 	//mVertices = renderer->createBuffer(cacheData.size(), stride, D3D12_HEAP_TYPE_DEFAULT, cacheData.data(), cacheData.size());
@@ -159,6 +182,16 @@ IPCFrame::IPCFrame()
 
 IPCFrame::~IPCFrame()
 {
+}
+
+void IPCFrame::iterateLights()
+{
+	for (TObjectIterator<ADirectionalLight> iter; iter; ++iter)
+	{
+		auto light = *iter;
+		auto world = light->GetTransform().ToMatrixWithScale().GetTransposed();
+	}
+
 }
 
 void IPCFrame::iterateObjects()
