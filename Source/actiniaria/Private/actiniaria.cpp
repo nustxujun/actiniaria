@@ -8,7 +8,9 @@
 
 #include "LevelEditor.h"
 #include "IPCFrame.h"
+#include "ActiniariaFrame.h"
 #include <thread>
+
 
 static const FName actiniariaTabName("actiniaria");
 
@@ -58,32 +60,29 @@ void FactiniariaModule::ShutdownModule()
 
 void FactiniariaModule::PluginButtonClicked()
 {
-	//ActiniariaFrame* frame = nullptr;
-	//int state = 0;
-	//if (mThread)
-	//	mThread->join();
-	//mThread = decltype(mThread){new std::thread([&ref = frame, &state]() {
-	//	ActiniariaFrame frame;
-	//	ref = &frame;
-	//	state = 1;
-	//	while(state != 2)
-	//		Sleep(1);
-	//	frame.update();
-	//})};
+	{
+		auto thread = std::thread([]() {
+			ActiniariaFrame frame;
+			frame.init();
+			frame.update();
+		});
 
-	//while(state != 1)
-	//	Sleep(1);
-	//frame->init();
-	//state = 2;
-	//
-	////mThread->join();
+		IPCFrame frame;
+		frame.init();
+
+		thread.join();
+	}
+
+
+	
+	//mThread->join();
 
 	////ActiniariaFrame frame;
 	////frame.init();
 	////frame.update();
 
-	IPCFrame frame;
-	frame.init();
+	//IPCFrame frame;
+	//frame.init();
 }
 
 void FactiniariaModule::AddMenuExtension(FMenuBuilder& Builder)

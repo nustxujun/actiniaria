@@ -2,7 +2,6 @@
 #include "Engine/Common.h"
 #include "Engine/D3DHelper.h"
 
-#include "Engine/RenderCommand.h"
 #include "Materials/MaterialInterface.h"
 #include "Materials/Material.h"
 #include "Materials/MaterialExpression.h"
@@ -12,7 +11,7 @@
 #include"Engine/Light.h"
 #include"Engine/DirectionalLight.h"
 
-void createMesh(const std::string& name, FStaticMeshRenderData & renderdata)
+void IPCFrame::createMesh(const std::string& name, FStaticMeshRenderData & renderdata)
 {
 
 	auto& mesh = renderdata.LODResources[0];
@@ -35,11 +34,11 @@ void createMesh(const std::string& name, FStaticMeshRenderData & renderdata)
 	};
 	for (auto i = 0; i < numVertices; ++i)
 	{
-		const auto& pos = positions.VertexPosition(i);
-		const auto& uv = vertices.GetVertexUV(i, 0);
-		const auto& normal = vertices.VertexTangentZ(i);
-		const auto& tangent = vertices.VertexTangentX(i);
-		const auto& binormal = vertices.VertexTangentY(i);
+		FVector pos = positions.VertexPosition(i);
+		FVector2D uv = vertices.GetVertexUV(i, 0);
+		FVector normal = vertices.VertexTangentZ(i);
+		FVector tangent = vertices.VertexTangentX(i);
+		FVector binormal = vertices.VertexTangentY(i);
 
 		move(data, pos);
 		move(data, uv);
@@ -70,14 +69,14 @@ void createMesh(const std::string& name, FStaticMeshRenderData & renderdata)
 
 	//mIndices = renderer->createBuffer(cacheData.size(), stride, D3D12_HEAP_TYPE_DEFAULT, cacheData.data(), cacheData.size());
 
-	RenderCommand::getSingleton()->createMesh(name,
+	rendercmd.createMesh(name,
 		vertexData.data(), vertexData.size(), numVertices, vertexstride, indexData.data(), indexData.size(), numIndices, indexstride);
 
 }
 
-void createModel(const std::string& name, const std::string& meshname, const Matrix& transform, const std::string& material)
+void IPCFrame::createModel(const std::string& name, const std::string& meshname, const Matrix& transform, const std::string& material)
 {
-	RenderCommand::getSingleton()->createModel(name,{meshname},transform, material);
+	rendercmd.createModel(name,{meshname},transform, material);
 }
 
 
@@ -117,7 +116,7 @@ std::string mapTextureType(TEnumAsByte<enum EMaterialSamplerType> type)
 	return "unknown";
 }
 
-void createMaterial( UMaterialInterface* material)
+void IPCFrame::createMaterial( UMaterialInterface* material)
 {
 	std::string name = U2M(*material->GetName());
 	auto base = material->GetBaseMaterial();
@@ -151,7 +150,7 @@ void createMaterial( UMaterialInterface* material)
 
 				uint32 BytesPerPixel = source.GetBytesPerPixel();
 				auto src = source.LockMip(0);
-				RenderCommand::getSingleton()->createTexture(U2M(*t->GetName()),width, height, convertFormat(format), src);
+				rendercmd.createTexture(U2M(*t->GetName()),width, height, convertFormat(format), src);
 				//auto tex = Renderer::getSingleton()->createTexture(width, height, convertFormat(format), src);
 				textures[mapTextureType(type)] = U2M(*t->GetName());
 				//tex->setName(*t->GetName());
@@ -160,7 +159,7 @@ void createMaterial( UMaterialInterface* material)
 		}
 	}
 
-	RenderCommand::getSingleton()->createMaterial(name,"shaders/scene_vs.hlsl", mapMaterial(name),parameters,textures);
+	rendercmd.createMaterial(name,"shaders/scene_vs.hlsl", mapMaterial(name),parameters,textures);
 
 }
 
@@ -177,7 +176,6 @@ IPCFrame::IPCFrame()
 	//}
 	//FString path = GetPluginPath() + "/Source/actiniaria/Private/engine/";
 
-	RenderCommand::init(true);
 }
 
 IPCFrame::~IPCFrame()
@@ -226,7 +224,7 @@ void IPCFrame::iterateObjects()
 		auto view = FTranslationMatrix(-camact->GetTransform().GetLocation()) * rotmat;
 		view = view.GetTransposed();
 
-		RenderCommand::getSingleton()->createCamera("main", *(Matrix*)&view, *(Matrix*)&proj, { 0,0, width , height, 0.0f, 1.0f });
+		rendercmd.createCamera("main", *(Matrix*)&view, *(Matrix*)&proj, { 0,0, width , height, 0.0f, 1.0f });
 
 	}
 
@@ -280,7 +278,7 @@ void IPCFrame::iterateObjects()
 	}
 
 
-	RenderCommand::getSingleton()->done();
+	rendercmd.done();
 }
 
 
