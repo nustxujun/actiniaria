@@ -108,8 +108,8 @@ std::string mapTextureType(TEnumAsByte<enum EMaterialSamplerType> type)
 {
 	switch (type)
 	{
-	case SAMPLERTYPE_Color: return "albedo";
-	case SAMPLERTYPE_Normal: return "normal";
+	case SAMPLERTYPE_Color: return "albedoMap";
+	case SAMPLERTYPE_Normal: return "normalMap";
 		break;
 	}
 
@@ -187,7 +187,10 @@ void IPCFrame::iterateLights()
 	for (TObjectIterator<ADirectionalLight> iter; iter; ++iter)
 	{
 		auto light = *iter;
-		auto world = light->GetTransform().ToMatrixWithScale().GetTransposed();
+		auto dir = light->GetTransform().ToMatrixNoScale().TransformFVector4(FVector4{1,0,0,0});
+		auto brightness = light->GetBrightness();
+		auto color = light->GetLightColor() * brightness;
+		rendercmd.createLight(U2M(*light->GetName()),0,*(Color*)&color, *(Vector3*)&dir);
 	}
 
 }
@@ -220,11 +223,12 @@ void IPCFrame::iterateObjects()
 			FPlane(0, 1, 0, 0),
 			FPlane(0, 0, 0, 1));
 		auto rotmat = FInverseRotationMatrix(rot) * ViewPlanesMatrix;
-
+		auto dir = camact->GetTransform().ToMatrixNoScale().TransformVector({1,0,0});
+		auto pos = camact->GetTransform().GetLocation();
 		auto view = FTranslationMatrix(-camact->GetTransform().GetLocation()) * rotmat;
 		view = view.GetTransposed();
 
-		rendercmd.createCamera("main", *(Matrix*)&view, *(Matrix*)&proj, { 0,0, width , height, 0.0f, 1.0f });
+		rendercmd.createCamera("main",{pos.X, pos.Y, pos.Z}, {dir.X, dir.Y, dir.Z}, *(Matrix*)&view, *(Matrix*)&proj, { 0,0, width , height, 0.0f, 1.0f });
 
 	}
 
@@ -278,7 +282,6 @@ void IPCFrame::iterateObjects()
 	}
 
 
-	rendercmd.done();
 }
 
 

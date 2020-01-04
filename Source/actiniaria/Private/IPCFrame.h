@@ -17,6 +17,8 @@ public:
 	{
 		iterateObjects();
 		iterateLights();
+
+		rendercmd.done();
 	}
 private:
 	void createMesh(const std::string& name, FStaticMeshRenderData & renderdata);
