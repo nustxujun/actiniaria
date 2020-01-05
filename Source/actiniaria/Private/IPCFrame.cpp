@@ -2,14 +2,19 @@
 #include "Engine/Common.h"
 #include "Engine/D3DHelper.h"
 
+#include "Core.h"
+
 #include "Materials/MaterialInterface.h"
 #include "Materials/Material.h"
+
 #include "Materials/MaterialExpression.h"
 #include "Materials/MaterialExpressionMultiply.h"
 #include "Materials/MaterialExpressionVectorParameter.h"
 
 #include"Engine/Light.h"
 #include"Engine/DirectionalLight.h"
+
+#include "MaterialParser.h"
 
 void IPCFrame::createMesh(const std::string& name, FStaticMeshRenderData & renderdata)
 {
@@ -120,9 +125,11 @@ void IPCFrame::createMaterial( UMaterialInterface* material)
 {
 	std::string name = U2M(*material->GetName());
 	auto base = material->GetBaseMaterial();
+
+
 	std::map<std::string, Vector4> parameters;
 
-	std::map<std::string, std::string> textures;
+	std::set< std::string> textures;
 	for (auto& expr : base->Expressions)
 	{
 		{
@@ -152,14 +159,14 @@ void IPCFrame::createMaterial( UMaterialInterface* material)
 				auto src = source.LockMip(0);
 				rendercmd.createTexture(U2M(*t->GetName()),width, height, convertFormat(format), src);
 				//auto tex = Renderer::getSingleton()->createTexture(width, height, convertFormat(format), src);
-				textures[mapTextureType(type)] = U2M(*t->GetName());
+				textures.insert(U2M(*t->GetName()));
 				//tex->setName(*t->GetName());
 				source.UnlockMip(0);
 			}
 		}
 	}
-
-	rendercmd.createMaterial(name,"shaders/scene_vs.hlsl", mapMaterial(name),parameters,textures);
+	MaterialParser parser;
+	rendercmd.createMaterial(name,"shaders/scene_vs.hlsl", name + "_ps", parser(material),textures);
 
 }
 
@@ -175,7 +182,7 @@ IPCFrame::IPCFrame()
 	//	std::cout << "console started." << std::endl;
 	//}
 	//FString path = GetPluginPath() + "/Source/actiniaria/Private/engine/";
-
+	rendercmd.init(true);
 }
 
 IPCFrame::~IPCFrame()

@@ -26,5 +26,5 @@ private:
 	void createMaterial(UMaterialInterface* material);
 
 
-	RenderCommand rendercmd = true;
+	RenderCommand rendercmd;
 };

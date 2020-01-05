@@ -60,29 +60,29 @@ void FactiniariaModule::ShutdownModule()
 
 void FactiniariaModule::PluginButtonClicked()
 {
-	//{
-	//	auto thread = std::thread([]() {
-	//		ActiniariaFrame frame;
-	//		frame.init();
-	//		frame.update();
-	//	});
+	ShowWindow(::GetActiveWindow(), SW_MINIMIZE);
 
+
+	{
+		auto thread = std::thread([]() {
+			ActiniariaFrame frame;
+			frame.init();
+			frame.update();
+		});
+
+		IPCFrame frame;
+		frame.init();
+
+		thread.join();
+	}
+
+
+	//while(true)
+	//{
 	//	IPCFrame frame;
 	//	frame.init();
-
-	//	thread.join();
 	//}
 
-
-	
-	//mThread->join();
-
-	////ActiniariaFrame frame;
-	////frame.init();
-	////frame.update();
-
-	IPCFrame frame;
-	frame.init();
 }
 
 void FactiniariaModule::AddMenuExtension(FMenuBuilder& Builder)

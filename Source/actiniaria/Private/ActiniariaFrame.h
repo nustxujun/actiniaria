@@ -19,7 +19,9 @@ public:
 	ActiniariaFrame()
 	{
 		FString path = GetPluginPath() + "/Source/actiniaria/Private/engine/";
-		Renderer::getSingleton()->addSearchPath(*path);
+		Renderer::getSingleton()->addSearchPath(U2M(*path));
+		path += "shaders/";
+		Renderer::getSingleton()->addSearchPath(U2M(*path));
 	}
 } ;
 
