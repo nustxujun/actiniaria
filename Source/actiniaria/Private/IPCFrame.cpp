@@ -249,7 +249,8 @@ void IPCFrame::iterateObjects()
 		if (mesh == nullptr)
 			continue;
 
-		auto material = mesh->GetMaterial(0);
+		//auto material = mesh->GetMaterial(0);
+		auto material = component->GetMaterial(0);
 		if (material == nullptr)
 			continue;
 		{
