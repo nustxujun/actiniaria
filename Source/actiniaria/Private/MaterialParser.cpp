@@ -136,7 +136,6 @@ MaterialParser::MaterialParser()
 	{
 		auto sampler = Cast<UMaterialExpressionTextureSample>(expr);
 		const auto& name = sampler->GetName();
-		std::string uv = "input.uv";
 		const auto& texture = sampler->Texture->GetName();
 
 		// bind resource
@@ -145,9 +144,18 @@ MaterialParser::MaterialParser()
 			res[texture] = "Texture2D " + U2M(*texture) + ";";
 		}
 
+
 		// define variable and sample texture
 		if (def.find(name) == def.end())
 		{
+			std::string uv = "input.uv";
+			if (inputs[0]->LinkedTo.Num() != 0)
+			{
+				std::stringstream uvparser;
+				parse(inputs[0]->LinkedTo[0], uvparser);
+				uv = uvparser.str();
+			}
+
 			def[name] = "half4 " + U2M(*name) + " = " + U2M(*texture) + ".Sample(linearSampler," + uv + ")";
 		}
 
@@ -171,12 +179,6 @@ MaterialParser::MaterialParser()
 		}
 
 
-		if (inputs[0]->LinkedTo.Num() != 0)
-		{
-			std::stringstream sss;
-			parse(inputs[0]->LinkedTo[0],sss);
-			auto content = sss.str();
-		}
 	};
 	mExprs["MaterialExpressionConstant"] = [](const TArray<UEdGraphPin*>& inputs, const TArray<UEdGraphPin*>& outputs, UMaterialExpression* expr, UEdGraphPin* pin, std::stringstream&  ss)
 	{
@@ -209,7 +211,7 @@ MaterialParser::MaterialParser()
 			parse(inputs[0]->LinkedTo[0], ss);
 		}
 
-		ss << " * ";
+		ss << " + ";
 
 		if (inputs[1]->LinkedTo.Num() == 0)
 		{
@@ -224,8 +226,13 @@ MaterialParser::MaterialParser()
 	mExprs["MaterialExpressionTextureCoordinate"] = [](const TArray<UEdGraphPin*>& inputs, const TArray<UEdGraphPin*>& outputs, UMaterialExpression* expr, UEdGraphPin* pin, std::stringstream&  ss)
 	{
 		auto tc = Cast<UMaterialExpressionTextureCoordinate>(expr);
-		const auto& var = constant->Constant;
-		ss << "half4(" << var.R << "," << var.G << "," << var.B << "," << var.B << ")";
+		ss << "input.uv";
+		if (tc->CoordinateIndex > 0)
+		{
+			ss << tc->CoordinateIndex;
+		}
+
+		ss << " * half2(" << tc->UTiling << "," << tc->VTiling<< ")";
 	};
 
 	
@@ -320,6 +327,7 @@ std::string MaterialParser::operator()(UMaterialInterface* material)
 	shader += "#endif\n";
 	shader += "	half3 _final = directBRDF(Roughness, Metallic, F0_DEFAULT, Base_Color.rgb, _normal.xyz,-sundir, campos - input.worldPos);\n";
 	shader += "	return half4(_final ,1) * suncolor;\n";
+	//shader += "	return half4(_normal * 0.5 + 0.5,1);";
 	shader += "\n}";
 	return shader;
 }
@@ -340,7 +348,11 @@ void MaterialParser::parse(UEdGraphPin * pin, std::stringstream & ss)
 	
 	auto cal = mExprs[name.GetPlainNameString()];
 	if (cal)
+	{
+		ss << "(";
 		cal(inputs, outputs, expr,pin, ss);
+		ss << ")";
+	}
 	else
 		Common::Assert(false, "cannot parse expression: " + (U2M(*name.ToString())));
 

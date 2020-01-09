@@ -216,9 +216,9 @@ void IPCFrame::iterateObjects()
 		FMatrix proj;
 		float FarZ = 1000;
 		float NearZ = 0.1f;
-		float halfFov = info.FOV * 0.5f;
-		float width = 800;
+		float halfFov = info.FOV * 0.5f * PI / 180.0f;
 		float height = 600;
+		float width = info.AspectRatio * height;
 
 		proj = FPerspectiveMatrix(halfFov, width, height, NearZ, FarZ).GetTransposed();
 
@@ -245,6 +245,8 @@ void IPCFrame::iterateObjects()
 	{
 		auto actor = *iter;
 		auto component = actor->GetStaticMeshComponent();
+		if (component == nullptr)
+			continue;
 		auto mesh = component->GetStaticMesh();
 		if (mesh == nullptr)
 			continue;
