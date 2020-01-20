@@ -297,7 +297,9 @@ std::string MaterialParser::operator()(UMaterialInterface* material)
 	}
 
 	std::string shader;
-
+	shader += "#ifndef __SHADER_CONTENT__\n";
+	shader += "#error need shader content\n";
+	shader += "#endif\n";
 	for (auto& m: mMacros)
 		shader += "#define " + m.second + "\n";
 	std::vector<std::string> headers = {
@@ -325,9 +327,11 @@ std::string MaterialParser::operator()(UMaterialInterface* material)
 	shader += "#else\n";
 	shader += "	half3 _normal = input.normal.xyz;\n";
 	shader += "#endif\n";
-	shader += "	half3 _final = directBRDF(Roughness, Metallic, F0_DEFAULT, Base_Color.rgb, _normal.xyz,-sundir, campos - input.worldPos);\n";
-	shader += "	return half4(_final ,1) * suncolor;\n";
+	//shader += "	half3 _final = directBRDF(Roughness, Metallic, F0_DEFAULT, Base_Color.rgb, _normal.xyz,-sundir, campos - input.worldPos);\n";
+	//shader += "	return half4(_final ,1) * suncolor;\n";
 	//shader += "	return half4(_normal * 0.5 + 0.5,1);";
+
+	shader += "	__SHADER_CONTENT__";
 	shader += "\n}";
 	return shader;
 }
