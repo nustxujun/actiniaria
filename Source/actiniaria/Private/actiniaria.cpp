@@ -92,7 +92,7 @@ void FactiniariaModule::PluginButtonClicked()
 			frame.rendercmd.record();
 		});
 		frame.init();
-		frame.rendercmd.invalid();
+		frame.rendercmd.invalidSelf();
 
 		thread.join();
 	}

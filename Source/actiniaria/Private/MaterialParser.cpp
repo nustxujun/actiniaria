@@ -14,6 +14,9 @@
 #include "Materials/MaterialExpressionConstant3Vector.h"
 #include "Materials/MaterialExpressionAdd.h"
 #include "Materials/MaterialExpressionTextureCoordinate.h"
+#include "Materials/MaterialExpressionClamp.h"
+#include "Materials/MaterialExpressionDivide.h"
+#include "Materials/MaterialExpressionMaterialFunctionCall.h"
 
 
 #include "MaterialGraph/MaterialGraph.h"
@@ -234,7 +237,59 @@ MaterialParser::MaterialParser()
 
 		ss << " * half2(" << tc->UTiling << "," << tc->VTiling<< ")";
 	};
+	mExprs["MaterialExpressionClamp"] = [&](const TArray<UEdGraphPin*>& inputs, const TArray<UEdGraphPin*>& outputs, UMaterialExpression* expr, UEdGraphPin* pin, std::stringstream&  ss)
+	{
+		auto clamp = Cast<UMaterialExpressionClamp>(expr);
+		ss << "clamp(";
+		parse(inputs[0]->LinkedTo[0], ss);
+		ss << ", ";
+		if (inputs[1]->LinkedTo.Num() == 0)
+		{
+			ss << clamp->MinDefault;
+		}
+		else
+		{
+			parse(inputs[1]->LinkedTo[0], ss);
+		}
+		ss << ", ";
+		if (inputs[2]->LinkedTo.Num() == 0)
+		{
+			ss << clamp->MinDefault;
+		}
+		else
+		{
+			parse(inputs[2]->LinkedTo[0], ss);
+		}
 
+		ss << ")";
+	};
+	mExprs["MaterialExpressionDivide"] = [&](const TArray<UEdGraphPin*>& inputs, const TArray<UEdGraphPin*>& outputs, UMaterialExpression* expr, UEdGraphPin* pin, std::stringstream&  ss)
+	{
+		auto div = Cast<UMaterialExpressionDivide>(expr);
+		if (inputs[0]->LinkedTo.Num() == 0)
+		{
+			ss << div->ConstA;
+		}
+		else
+		{
+			parse(inputs[0]->LinkedTo[0], ss);
+		}
+		ss << "/";
+		if (inputs[1]->LinkedTo.Num() == 0)
+		{
+			ss << div->ConstB;
+		}
+		else
+		{
+			parse(inputs[1]->LinkedTo[0], ss);
+		}
+
+	};
+	mExprs["MaterialExpressionMaterialFunctionCall"] = [&](const TArray<UEdGraphPin*>& inputs, const TArray<UEdGraphPin*>& outputs, UMaterialExpression* expr, UEdGraphPin* pin, std::stringstream&  ss)
+	{
+		auto fc = Cast<UMaterialExpressionMaterialFunctionCall>(expr);
+		Common::Assert(0, "no impl");
+	};
 	
 }
 
