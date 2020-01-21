@@ -25,6 +25,6 @@ private:
 	void createModel(const std::string& name, const std::string& meshname, const Matrix& transform, const std::string& material);
 	void createMaterial(UMaterialInterface* material);
 
-
+public:
 	RenderCommand rendercmd;
 };

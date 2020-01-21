@@ -63,25 +63,39 @@ void FactiniariaModule::PluginButtonClicked()
 	ShowWindow(::GetActiveWindow(), SW_MINIMIZE);
 
 
-	{
-		auto thread = std::thread([]() {
-			ActiniariaFrame frame;
-			frame.init();
-			frame.update();
-		});
+	//{
+	//	IPCFrame frame;
 
-		IPCFrame frame;
-		frame.init();
+	//	auto thread = std::thread([&ipc = frame]() {
+	//		ActiniariaFrame frame;
+	//		try{
+	//			frame.init();
+	//			frame.update();
+	//		}
+	//		catch (...)
+	//		{
+	//			frame.rendercmd.invalid();
+	//			ipc.rendercmd.record();
+	//		}
+	//	});
 
-		thread.join();
-	}
+	//	frame.init();
+
+	//	thread.join();
+	//}
 
 
 	//while(true)
-	//{
-	//	IPCFrame frame;
-	//	frame.init();
-	//}
+	{
+		IPCFrame frame;
+		std::thread thread([&](){
+			frame.rendercmd.record();
+		});
+		frame.init();
+		frame.rendercmd.invalid();
+
+		thread.join();
+	}
 
 }
 
