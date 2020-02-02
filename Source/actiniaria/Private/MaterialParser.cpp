@@ -1,6 +1,8 @@
 #include "MaterialParser.h"
 
 #include "Materials/Material.h"
+#include "Materials/MaterialInstance.h"
+
 #include "Materials/MaterialExpression.h"
 #include "Materials/MaterialExpressionMultiply.h"
 #include "Materials/MaterialExpressionVectorParameter.h"
@@ -17,6 +19,9 @@
 #include "Materials/MaterialExpressionClamp.h"
 #include "Materials/MaterialExpressionDivide.h"
 #include "Materials/MaterialExpressionMaterialFunctionCall.h"
+#include "Materials/MaterialExpressionVertexColor.h"
+
+
 
 
 #include "MaterialGraph/MaterialGraph.h"
@@ -37,27 +42,35 @@ std::string tostring(const FVector4& v)
 
 MaterialParser::MaterialParser()
 {
-	mExprs["MaterialExpressionVectorParameter"] = [&](const TArray<UEdGraphPin*>& inputs, const TArray<UEdGraphPin*>& outputs, UMaterialExpression* expr, UEdGraphPin* pin, std::stringstream&  ss)
+	mExprs["MaterialExpressionVectorParameter"] = [&, &overrides = mOverrideVectorParameters](const TArray<UEdGraphPin*>& inputs, const TArray<UEdGraphPin*>& outputs, UMaterialExpression* expr, UEdGraphPin* pin, std::stringstream&  ss)
 	{
 		auto vector = Cast<UMaterialExpressionVectorParameter>(expr);
+
+		auto defaultvalue = vector->DefaultValue;
+		auto ret = overrides.find(vector->ParameterName);
+		if (ret != overrides.end())
+		{
+			defaultvalue = ret->second->ParameterValue;
+		}
+
 		if (pin->PinName == "R")
 		{
-			ss << vector->DefaultValue.R;
+			ss << defaultvalue.R;
 		}
 		else if (pin->PinName == "G")
 		{ 
-			ss << vector->DefaultValue.G;
+			ss << defaultvalue.G;
 		}
 		else if (pin->PinName == "B")
 		{
-			ss << vector->DefaultValue.B;
+			ss << defaultvalue.B;
 		}
 		else if (pin->PinName == "A")
 		{
-			ss << vector->DefaultValue.A;
+			ss << defaultvalue.A;
 		}
 		else
-			ss <<  tostring(vector->DefaultValue) ;
+			ss <<  tostring(defaultvalue) ;
 	};
 
 	mExprs["MaterialExpressionLinearInterpolate"] = [&](const TArray<UEdGraphPin*>& inputs, const TArray<UEdGraphPin*>& outputs, UMaterialExpression* expr, UEdGraphPin* pin, std::stringstream&  ss)
@@ -128,11 +141,16 @@ MaterialParser::MaterialParser()
 
 	};
 
-	mExprs["MaterialExpressionScalarParameter"] = [](const TArray<UEdGraphPin*>& inputs, const TArray<UEdGraphPin*>& outputs, UMaterialExpression* expr, UEdGraphPin* pin, std::stringstream&  ss)
+	mExprs["MaterialExpressionScalarParameter"] = [&overrides = mOverrideScalarParameters](const TArray<UEdGraphPin*>& inputs, const TArray<UEdGraphPin*>& outputs, UMaterialExpression* expr, UEdGraphPin* pin, std::stringstream&  ss)
 	{
 		auto scalar = Cast<UMaterialExpressionScalarParameter>(expr);
-		
-		ss << scalar->DefaultValue;
+		auto defaultvalue = scalar->DefaultValue;
+		auto ret = overrides.find(scalar->ParameterName);
+		if (ret != overrides.end())
+		{
+			defaultvalue = ret->second->ParameterValue;
+		}
+		ss << defaultvalue;
 	};
 
 	mExprs["MaterialExpressionTextureSample"] = [&, &res = mBoundResources, &def = mDefinations](const TArray<UEdGraphPin*>& inputs, const TArray<UEdGraphPin*>& outputs, UMaterialExpression* expr, UEdGraphPin* pin, std::stringstream&  ss)
@@ -180,7 +198,7 @@ MaterialParser::MaterialParser()
 		{
 			ss << ".a";
 		}
-
+		
 
 	};
 	mExprs["MaterialExpressionConstant"] = [](const TArray<UEdGraphPin*>& inputs, const TArray<UEdGraphPin*>& outputs, UMaterialExpression* expr, UEdGraphPin* pin, std::stringstream&  ss)
@@ -290,6 +308,28 @@ MaterialParser::MaterialParser()
 		auto fc = Cast<UMaterialExpressionMaterialFunctionCall>(expr);
 		Common::Assert(0, "no impl");
 	};
+	mExprs["MaterialExpressionVertexColor"] = [&](const TArray<UEdGraphPin*>& inputs, const TArray<UEdGraphPin*>& outputs, UMaterialExpression* expr, UEdGraphPin* pin, std::stringstream& ss)
+	{
+		auto vc = Cast<UMaterialExpressionVertexColor>(expr);
+		ss << "input.color" ;
+
+		if (pin->PinName == "Output2")
+		{
+			ss << ".r";
+		}
+		else if (pin->PinName == "Output3")
+		{
+			ss << ".g";
+		}
+		else if (pin->PinName == "Output4")
+		{
+			ss << ".b";
+		}
+		else if (pin->PinName == "Output5")
+		{
+			ss << ".a";
+		}
+	};
 	
 }
 
@@ -297,7 +337,23 @@ std::string MaterialParser::operator()(UMaterialInterface* material)
 {
 	mBoundResources.clear();
 	mDefinations.clear();
+	mOverrideVectorParameters.clear();
+	mOverrideScalarParameters.clear();
 	mMacros.clear();
+	auto instance = Cast<UMaterialInstance>(material);
+	if (instance)
+	{
+		for (auto& vp : instance->VectorParameterValues)
+		{
+			mOverrideVectorParameters[vp.ParameterName_DEPRECATED] = &vp;
+		}
+
+		for (auto& vp : instance->ScalarParameterValues)
+		{
+			mOverrideScalarParameters[vp.ParameterName_DEPRECATED] = &vp;
+		}
+	}
+
 	auto base = material->GetBaseMaterial();
 	if (!base->MaterialGraph)
 	{
@@ -319,6 +375,19 @@ std::string MaterialParser::operator()(UMaterialInterface* material)
 
 	std::stringstream ss;
 
+	struct Requirement
+	{
+		bool exist = false;
+		std::string type ;
+		std::string value;
+	};
+	std::map<FString, Requirement> required;
+	
+	required["Roughness"] = {false, "half", Common::format(base->Roughness.Constant)};
+	required["Metallic"] = { false, "half", Common::format(base->Metallic.Constant) };
+	required["Emissive Color"] = { false, "half3", "0.0f" };
+
+
 	for (int32 Index = 0; Index < InputPins.Num(); ++Index)
 	{
 		if (graph->MaterialInputs[Index].IsVisiblePin(graph->Material)
@@ -332,29 +401,44 @@ std::string MaterialParser::operator()(UMaterialInterface* material)
 			}
 
 			FString var = "	";
+			FString trailer ;
 			switch (type)
 			{
 			case MCT_Float:
 			case MCT_Float1: var += "half ";break;
-			case MCT_Float2: var += "half2 "; break;
-			case MCT_Float3: var += "half3 "; break;
-			case MCT_Float4: var += "half4 "; break;
+			case MCT_Float2: var += "half2 "; trailer = ".rg"; break;
+			case MCT_Float3: var += "half3 "; trailer = ".rgb"; break;
+			case MCT_Float4: var += "half4 "; trailer = ".rgba"; break;
 			default: 
 				Common::Assert(false, "unsupported type");
 			}
 
 			auto name = graph->MaterialInputs[Index].GetName().ToString();
 			var += name.Replace(L" ", L"_");
+
+			if (required.find(name) != required.end())
+			{
+				required[name].exist = true;
+			}
+
 			ss << U2M(*var) << " = ";
 			parse(InputPins[Index]->LinkedTo[0], ss);
-			ss << ";\n";
+			ss <<  ";\n";
+		}
+	}
+
+	for (auto& r : required)
+	{
+		if (!r.second.exist)
+		{
+			ss << "	" << r.second.type << " " << U2M(*r.first.Replace(L" ", L"_")) << " = " << r.second.value << ";\n";
 		}
 	}
 
 	std::string shader;
-	shader += "#ifndef __SHADER_CONTENT__\n";
-	shader += "#error need shader content\n";
-	shader += "#endif\n";
+	//shader += "#ifndef __SHADER_CONTENT__\n";
+	//shader += "#error need shader content\n";
+	//shader += "#endif\n";
 	for (auto& m: mMacros)
 		shader += "#define " + m.second + "\n";
 	std::vector<std::string> headers = {
@@ -387,7 +471,7 @@ std::string MaterialParser::operator()(UMaterialInterface* material)
 	//shader += "	return half4(_normal * 0.5 + 0.5,1);";
 
 	shader += "	__SHADER_CONTENT__";
-	shader += "\n}";
+	shader += "\n\n}\n\n";
 	return shader;
 }
 

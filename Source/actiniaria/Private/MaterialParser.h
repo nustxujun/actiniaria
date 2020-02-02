@@ -16,4 +16,7 @@ private:
 	std::map<FString, std::string> mBoundResources;
 	std::map<FString,std::string> mDefinations;
 	std::map<FString, std::string> mMacros;
+	std::map<FName, FVectorParameterValue*> mOverrideVectorParameters;
+	std::map<FName, FScalarParameterValue*> mOverrideScalarParameters;
+
 };

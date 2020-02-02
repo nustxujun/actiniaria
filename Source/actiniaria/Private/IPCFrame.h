@@ -22,7 +22,7 @@ public:
 	}
 private:
 	void createMesh(const std::string& name, FStaticMeshRenderData & renderdata);
-	void createModel(const std::string& name, const std::string& meshname, const Matrix& transform, const std::string& material);
+	void createModel(const std::string& name, const std::string& meshname, const Matrix& transform, const Matrix& normaltransform, const std::vector< std::string>& materials);
 	void createMaterial(UMaterialInterface* material);
 
 public:

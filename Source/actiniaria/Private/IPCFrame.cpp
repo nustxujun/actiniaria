@@ -6,6 +6,7 @@
 
 #include "Materials/MaterialInterface.h"
 #include "Materials/Material.h"
+#include "Materials/MaterialInstance.h"
 
 #include "Materials/MaterialExpression.h"
 #include "Materials/MaterialExpressionMultiply.h"
@@ -22,6 +23,7 @@ void IPCFrame::createMesh(const std::string& name, FStaticMeshRenderData & rende
 	auto& mesh = renderdata.LODResources[0];
 	auto numVertices = mesh.GetNumVertices();
 	auto& positions = mesh.VertexBuffers.PositionVertexBuffer;
+	auto& colors = mesh.VertexBuffers.ColorVertexBuffer;
 	auto& vertices = mesh.VertexBuffers.StaticMeshVertexBuffer;
 
 	auto vertexstride = (
@@ -29,7 +31,9 @@ void IPCFrame::createMesh(const std::string& name, FStaticMeshRenderData & rende
 		sizeof(FVector2D) + //uv
 		sizeof(FVector) +  // normal
 		sizeof(FVector) +  // tangent
-		sizeof(FVector) ); // binormal
+		sizeof(FVector) +// binormal
+		sizeof(FColor) // color
+	); 	
 	std::vector<char> vertexData(vertexstride * numVertices);
 	char* data = vertexData.data();
 	auto move = [](char*& data, const auto& value)
@@ -44,12 +48,15 @@ void IPCFrame::createMesh(const std::string& name, FStaticMeshRenderData & rende
 		FVector normal = vertices.VertexTangentZ(i);
 		FVector tangent = vertices.VertexTangentX(i);
 		FVector binormal = vertices.VertexTangentY(i);
+		FColor color = (int)colors.GetNumVertices() > i? colors.VertexColor(i):FColor(0xffffffff);
+
 
 		move(data, pos);
 		move(data, uv);
 		move(data, normal);
 		move(data, tangent);
 		move(data, binormal);
+		move(data, color);
 
 
 		//memcpy(data, &pos, sizeof(FVector));
@@ -72,16 +79,26 @@ void IPCFrame::createMesh(const std::string& name, FStaticMeshRenderData & rende
 		data += indexstride;
 	}
 
-	//mIndices = renderer->createBuffer(cacheData.size(), stride, D3D12_HEAP_TYPE_DEFAULT, cacheData.data(), cacheData.size());
+	std::vector<RenderCommand::SubMesh> subs;
+
+	for (auto& s : mesh.Sections)
+	{
+		subs.push_back({
+			(UINT)s.MaterialIndex,
+			(UINT)s.FirstIndex,
+			(UINT)s.NumTriangles * 3,
+			(UINT)s.MinVertexIndex
+		});
+	}
 
 	rendercmd.createMesh(name,
-		vertexData.data(), vertexData.size(), numVertices, vertexstride, indexData.data(), indexData.size(), numIndices, indexstride);
+		vertexData.data(), vertexData.size(), numVertices, vertexstride, indexData.data(), indexData.size(), numIndices, indexstride, subs);
 
 }
 
-void IPCFrame::createModel(const std::string& name, const std::string& meshname, const Matrix& transform, const std::string& material)
+void IPCFrame::createModel(const std::string& name, const std::string& meshname, const Matrix& transform, const Matrix& normaltransform, const std::vector<std::string>& materials)
 {
-	rendercmd.createModel(name,{meshname},transform, material);
+	rendercmd.createModel(name,{meshname},transform, normaltransform,materials);
 }
 
 
@@ -126,23 +143,22 @@ void IPCFrame::createMaterial( UMaterialInterface* material)
 	std::string name = U2M(*material->GetName());
 	auto base = material->GetBaseMaterial();
 
-
-	std::map<std::string, Vector4> parameters;
+	//std::map<std::string, Vector4> parameters;
 
 	std::set< std::string> textures;
 	for (auto& expr : base->Expressions)
 	{
-		{
-			const UMaterialExpressionVectorParameter* param = Cast<const UMaterialExpressionVectorParameter>(expr);
-			if (param)
-			{
-				TArray<FMaterialParameterInfo> info;
-				TArray<FGuid> id;
-				param->GetAllParameterInfo(info, id, nullptr);
-				std::string name = TCHAR_TO_ANSI(*info[0].Name.ToString());
-				parameters[name] = *(Vector4*)&param->DefaultValue;
-			}
-		}
+		//{
+		//	const UMaterialExpressionVectorParameter* param = Cast<const UMaterialExpressionVectorParameter>(expr);
+		//	if (param)
+		//	{
+		//		TArray<FMaterialParameterInfo> info;
+		//		TArray<FGuid> id;
+		//		param->GetAllParameterInfo(info, id, nullptr);
+		//		std::string tmpname = TCHAR_TO_ANSI(*info[0].Name.ToString());
+		//		parameters[tmpname] = *(Vector4*)&param->DefaultValue;
+		//	}
+		//}
 		{
 			const UMaterialExpressionTextureSample* param = Cast<const UMaterialExpressionTextureSample>(expr);
 			if (param)
@@ -214,8 +230,8 @@ void IPCFrame::iterateObjects()
 		camcom->GetCameraView(0, info);
 
 		FMatrix proj;
-		float FarZ = 1000;
-		float NearZ = 0.1f;
+		float FarZ = GNearClippingPlane;
+		float NearZ = GNearClippingPlane;
 		float halfFov = info.FOV * 0.5f * PI / 180.0f;
 		float height = 600;
 		float width = info.AspectRatio * height;
@@ -252,19 +268,30 @@ void IPCFrame::iterateObjects()
 			continue;
 
 		//auto material = mesh->GetMaterial(0);
-		auto material = component->GetMaterial(0);
-		if (material == nullptr)
+		auto numMaterials = component->GetNumMaterials();
+		if (numMaterials == 0)
 			continue;
+
+		std::vector<std::string> mats;
+		for (int i = 0; i < numMaterials; ++i)
 		{
+			auto material = component->GetMaterial(i);
+			
 			auto ret = materials.find(material->GetName());
 			if (ret != materials.end())
-			{ }
+			{
+			}
 			else
 			{
 				createMaterial(material);
 				materials.insert(material->GetName());
 			}
+
+			mats.push_back(U2M(*material->GetName()));
+			
 		}
+
+
 
 		{
 			auto ret = meshs.find(mesh->GetName());
@@ -280,7 +307,8 @@ void IPCFrame::iterateObjects()
 		}
 
 		auto world = actor->GetTransform().ToMatrixWithScale().GetTransposed();
-		createModel(U2M(*actor->GetName()), U2M(*mesh->GetName()), *(Matrix*)&world, U2M(*material->GetName()));
+		auto nworld = actor->GetTransform().Inverse().ToMatrixWithScale(); // world -> inverse -> transpose -> normal world
+		createModel(U2M(*actor->GetName()), U2M(*mesh->GetName()), *(Matrix*)&world, *(Matrix*)&nworld, mats);
 		//auto model = Model::Ptr(new Model());
 		//model->setMaterial(mat);
 		//model->setMesh(dstMesh);
