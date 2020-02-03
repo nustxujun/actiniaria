@@ -11,7 +11,6 @@
 ## Todo
 - Generation of shader from Material Graph
 - Skylight 
-- Multi-Materials 
 - Shadow
 - Reflection
 - Volumtic fog

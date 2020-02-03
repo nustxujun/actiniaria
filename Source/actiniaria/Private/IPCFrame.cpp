@@ -87,7 +87,6 @@ void IPCFrame::createMesh(const std::string& name, FStaticMeshRenderData & rende
 			(UINT)s.MaterialIndex,
 			(UINT)s.FirstIndex,
 			(UINT)s.NumTriangles * 3,
-			(UINT)s.MinVertexIndex
 		});
 	}
 
