@@ -33,6 +33,10 @@
 #include "Editor.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 
+#include <regex>
+
+
+
 std::string tostring(const FVector4& v)
 {
 	std::stringstream ss;
@@ -159,10 +163,16 @@ MaterialParser::MaterialParser()
 		const auto& name = sampler->GetName();
 		const auto& texture = sampler->Texture->GetName();
 
+		auto toVariable = [](const std::string & str)
+		{
+			std::regex r("[^0-9a-zA-Z_]");
+			return "_" + std::regex_replace(str, r, "_");
+		};
+
 		// bind resource
 		if (res.find(texture) == res.end())
 		{
-			res[texture] = "Texture2D " + U2M(*texture) + ";";
+			res[texture] = "Texture2D " + toVariable(U2M(*texture));
 		}
 
 
@@ -177,7 +187,7 @@ MaterialParser::MaterialParser()
 				uv = uvparser.str();
 			}
 
-			def[name] = "half4 " + U2M(*name) + " = " + U2M(*texture) + ".Sample(linearSampler," + uv + ")";
+			def[name] = "half4 " + U2M(*name) + " = " + toVariable(U2M(*texture)) + ".Sample(anisotropicSampler," + uv + ")";
 		}
 
 		ss << U2M(*name);
@@ -452,7 +462,11 @@ std::string MaterialParser::operator()(UMaterialInterface* material)
 	for (auto& r: mBoundResources)
 		shader += r.second + ";\n";
 
-	shader += "sampler linearSampler:register(s0);\n";
+	shader += "__BOUND_RESOURCE__  \n";
+
+	shader += "sampler pointSampler:register(s0);\n";
+	shader += "sampler linearSampler:register(s1);\n";
+	shader += "sampler anisotropicSampler:register(s2);\n";
 
 	shader += "half4 ps(PSInput input):SV_TARGET \n{\n";
 

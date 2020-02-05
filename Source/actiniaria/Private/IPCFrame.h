@@ -11,19 +11,16 @@ class IPCFrame
 public:
 	IPCFrame();
 	~IPCFrame();
+
+	void init();
+private:
 	void iterateObjects();
 	void iterateLights();
-	void init()
-	{
-		iterateObjects();
-		iterateLights();
+	void iterateCapture();
 
-		rendercmd.done();
-	}
-private:
 	void createMesh(const std::string& name, FStaticMeshRenderData & renderdata);
 	void createModel(const std::string& name, const std::string& meshname, const Matrix& transform, const Matrix& normaltransform, const std::vector< std::string>& materials);
-	void createMaterial(UMaterialInterface* material);
+	void createMaterial(UMaterialInterface* material,  std::set<std::string>& textureMap);
 
 public:
 	RenderCommand rendercmd;

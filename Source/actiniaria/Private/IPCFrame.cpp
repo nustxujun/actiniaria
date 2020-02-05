@@ -14,8 +14,13 @@
 
 #include"Engine/Light.h"
 #include"Engine/DirectionalLight.h"
+#include "Engine/ReflectionCapture.h"
+#include "Components/ReflectionCaptureComponent.h"
+#include "Engine/MapBuildDataRegistry.h"
 
 #include "MaterialParser.h"
+
+
 
 void IPCFrame::createMesh(const std::string& name, FStaticMeshRenderData & renderdata)
 {
@@ -137,11 +142,15 @@ std::string mapTextureType(TEnumAsByte<enum EMaterialSamplerType> type)
 	return "unknown";
 }
 
-void IPCFrame::createMaterial( UMaterialInterface* material)
+void IPCFrame::createMaterial( UMaterialInterface* material, std::set<std::string>& textureMap)
 {
 	std::string name = U2M(*material->GetName());
 	auto base = material->GetBaseMaterial();
-
+	auto toVariable = [](const std::string & str)
+	{
+		std::regex r("[^0-9a-zA-Z_]");
+		return "_" + std::regex_replace(str, r, "_");
+	};
 	//std::map<std::string, Vector4> parameters;
 
 	std::set< std::string> textures;
@@ -171,12 +180,16 @@ void IPCFrame::createMaterial( UMaterialInterface* material)
 				auto format = source.GetFormat();
 
 				uint32 BytesPerPixel = source.GetBytesPerPixel();
-				auto src = source.LockMip(0);
-				rendercmd.createTexture(U2M(*t->GetName()),width, height, convertFormat(format), src);
-				//auto tex = Renderer::getSingleton()->createTexture(width, height, convertFormat(format), src);
-				textures.insert(U2M(*t->GetName()));
-				//tex->setName(*t->GetName());
-				source.UnlockMip(0);
+
+				std::string texturename = toVariable(U2M(*t->GetName()));
+				if (textureMap.find(texturename) == textureMap.end())
+				{
+					auto src = source.LockMip(0);
+					rendercmd.createTexture(texturename, width, height, convertFormat(format), (bool)t->SRGB,src);
+					source.UnlockMip(0);
+				}
+				textureMap.insert(texturename);
+				textures.insert(texturename);
 			}
 		}
 	}
@@ -215,6 +228,38 @@ void IPCFrame::iterateLights()
 		rendercmd.createLight(U2M(*light->GetName()),0,*(Color*)&color, *(Vector3*)&dir);
 	}
 
+}
+
+void IPCFrame::iterateCapture()
+{
+	for (TObjectIterator< AReflectionCapture> iter; iter; ++iter)
+	{
+		auto actor = *iter;
+		auto comp = actor->GetCaptureComponent();
+		if (comp == nullptr)
+			continue;
+		auto data = comp->GetMapBuildData();
+		if (data == nullptr)
+			continue;
+		auto transfrom = comp->GetComponentTransform();
+		auto mat = transfrom.ToMatrixWithScale().GetTransposed();
+		rendercmd.createReflectionProbe(
+			U2M(*actor->GetName()),
+			*(Matrix*)&mat,
+			comp->GetInfluenceBoundingRadius(),
+			data->Brightness,data->CubemapSize, 
+			data->FullHDRCapturedData.GetData(), 
+			data->FullHDRCapturedData.Num()
+		);
+	}
+}
+
+void IPCFrame::init()
+{
+	iterateObjects();
+	iterateLights();
+	iterateCapture();
+	rendercmd.done();
 }
 
 void IPCFrame::iterateObjects()
@@ -256,6 +301,7 @@ void IPCFrame::iterateObjects()
 
 	std::set<FString> meshs;
 	std::set<FString> materials;
+	std::set<std::string> textures;
 	for (TObjectIterator<AStaticMeshActor> iter; iter; ++iter)
 	{
 		auto actor = *iter;
@@ -268,27 +314,30 @@ void IPCFrame::iterateObjects()
 
 		//auto material = mesh->GetMaterial(0);
 		auto numMaterials = component->GetNumMaterials();
-		if (numMaterials == 0)
-			continue;
 
 		std::vector<std::string> mats;
 		for (int i = 0; i < numMaterials; ++i)
 		{
 			auto material = component->GetMaterial(i);
-			
+			if (material == nullptr)
+				continue;
+		
 			auto ret = materials.find(material->GetName());
 			if (ret != materials.end())
 			{
 			}
 			else
 			{
-				createMaterial(material);
+				createMaterial(material, textures);
 				materials.insert(material->GetName());
 			}
 
 			mats.push_back(U2M(*material->GetName()));
 			
 		}
+
+		if (mats.size() != numMaterials)
+			continue;
 
 
 
