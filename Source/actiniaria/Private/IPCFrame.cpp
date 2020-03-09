@@ -100,9 +100,62 @@ void IPCFrame::createMesh(const std::string& name, FStaticMeshRenderData & rende
 
 }
 
-void IPCFrame::createModel(const std::string& name, const std::string& meshname, const Matrix& transform, const Matrix& normaltransform, const std::vector<std::string>& materials)
+
+void IPCFrame::createStaticMesh(AStaticMeshActor * actor)
 {
-	rendercmd.createModel(name,{meshname},transform, normaltransform,materials);
+	auto component = actor->GetStaticMeshComponent();
+	if (component == nullptr)
+		return;
+	auto mesh = component->GetStaticMesh();
+	if (mesh == nullptr)
+		return;
+
+	//auto material = mesh->GetMaterial(0);
+	auto numMaterials = component->GetNumMaterials();
+
+	std::vector<std::string> mats;
+	for (int i = 0; i < numMaterials; ++i)
+	{
+		auto material = component->GetMaterial(i);
+		if (material == nullptr)
+			continue;
+
+		auto ret = materials.find(material->GetName());
+		if (ret != materials.end())
+		{
+		}
+		else
+		{
+			createMaterial(material, textures);
+			materials.insert(material->GetName());
+		}
+
+		mats.push_back(U2M(*material->GetName()));
+
+	}
+
+	if (mats.size() != numMaterials)
+		return;
+
+
+
+	{
+		auto ret = meshs.find(mesh->GetName());
+		if (ret != meshs.end())
+		{
+		}
+		else
+		{
+			//dstMesh = StaticMesh::Ptr(new StaticMesh(*mesh->RenderData));
+			createMesh(U2M(*mesh->GetName()), *mesh->RenderData);
+			meshs.insert(mesh->GetName());
+		}
+	}
+
+	auto world = actor->GetTransform().ToMatrixWithScale().GetTransposed();
+	auto nworld = actor->GetTransform().Inverse().ToMatrixWithScale(); // world -> inverse -> transpose -> normal world
+	rendercmd.createModel(U2M(*actor->GetName()), { U2M(*mesh->GetName()) }, *(Matrix*)&world, *(Matrix*)&nworld, mats);
+
 }
 
 
@@ -196,6 +249,11 @@ void IPCFrame::createMaterial( UMaterialInterface* material, std::set<std::strin
 	MaterialParser parser;
 	rendercmd.createMaterial(name,"shaders/scene_vs.hlsl", name + "_ps", parser(material),textures);
 
+}
+
+void IPCFrame::createSkySphere(const std::string & name, const std::string & meshname, const std::string & mat, const Matrix& tran)
+{
+	rendercmd.createSky(name, meshname, mat, tran);
 }
 
 IPCFrame::IPCFrame()
@@ -305,40 +363,44 @@ void IPCFrame::iterateObjects()
 	for (TObjectIterator<AStaticMeshActor> iter; iter; ++iter)
 	{
 		auto actor = *iter;
-		auto component = actor->GetStaticMeshComponent();
-		if (component == nullptr)
+		createStaticMesh(actor);
+	
+	}
+
+	for (TObjectIterator<AActor> iter; iter; ++iter)
+	{
+		auto& actor = iter;
+		auto cls = actor->GetClass();
+		auto clsname = cls->GetName();
+		if (clsname != (L"BP_Sky_Sphere_C"))
+		{
 			continue;
-		auto mesh = component->GetStaticMesh();
+		}
+		OutputDebugString(*clsname);
+		OutputDebugString(L"\n");
+
+		auto comp = actor->GetComponentByClass(UStaticMeshComponent::StaticClass());
+
+		if (comp == nullptr)
+			continue;
+
+		auto mesh = Cast<UStaticMeshComponent>(comp)->GetStaticMesh();
 		if (mesh == nullptr)
 			continue;
 
-		//auto material = mesh->GetMaterial(0);
-		auto numMaterials = component->GetNumMaterials();
-
-		std::vector<std::string> mats;
-		for (int i = 0; i < numMaterials; ++i)
-		{
-			auto material = component->GetMaterial(i);
-			if (material == nullptr)
-				continue;
-		
-			auto ret = materials.find(material->GetName());
-			if (ret != materials.end())
-			{
-			}
-			else
-			{
-				createMaterial(material, textures);
-				materials.insert(material->GetName());
-			}
-
-			mats.push_back(U2M(*material->GetName()));
-			
-		}
-
-		if (mats.size() != numMaterials)
+		auto material = Cast<UStaticMeshComponent>(comp)->GetMaterial(0);
+		if (material == nullptr)
 			continue;
 
+		auto ret = materials.find(material->GetName());
+		if (ret != materials.end())
+		{
+		}
+		else
+		{
+			createMaterial(material, textures);
+			materials.insert(material->GetName());
+		}
 
 
 		{
@@ -355,18 +417,9 @@ void IPCFrame::iterateObjects()
 		}
 
 		auto world = actor->GetTransform().ToMatrixWithScale().GetTransposed();
-		auto nworld = actor->GetTransform().Inverse().ToMatrixWithScale(); // world -> inverse -> transpose -> normal world
-		createModel(U2M(*actor->GetName()), U2M(*mesh->GetName()), *(Matrix*)&world, *(Matrix*)&nworld, mats);
-		//auto model = Model::Ptr(new Model());
-		//model->setMaterial(mat);
-		//model->setMesh(dstMesh);
-		//model->setTramsform(actor->GetTransform().ToMatrixWithScale());
-		//model->setVSCBuffer(mat->pipelineState->createConstantBuffer(Renderer::Shader::ST_VERTEX, "VSConstant"));
-		//model->setPSCBuffer(mat->pipelineState->createConstantBuffer(Renderer::Shader::ST_PIXEL, "PSConstant"));
+		createSkySphere(U2M(*actor->GetName()), U2M(*mesh->GetName()), U2M(*material->GetName()),*(Matrix*)&world);
 
-		//models.push_back(model);
 	}
-
 
 }
 

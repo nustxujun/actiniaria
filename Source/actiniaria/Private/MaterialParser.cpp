@@ -5,10 +5,10 @@
 
 #include "Materials/MaterialExpression.h"
 #include "Materials/MaterialExpressionMultiply.h"
+#include "Materials/MaterialExpressionDivide.h"
 #include "Materials/MaterialExpressionVectorParameter.h"
 #include "Materials/MaterialExpressionCustomOutput.h"
 #include "Materials/MaterialExpressionLinearInterpolate.h"
-#include "Materials/MaterialExpressionMultiply.h"
 #include "Materials/MaterialExpressionScalarParameter.h"
 #include "Materials/MaterialExpressionTextureSample.h"
 #include "Materials/MaterialExpressionConstant.h"
@@ -20,6 +20,17 @@
 #include "Materials/MaterialExpressionDivide.h"
 #include "Materials/MaterialExpressionMaterialFunctionCall.h"
 #include "Materials/MaterialExpressionVertexColor.h"
+#include "Materials/MaterialExpressionSubtract.h"
+#include "Materials/MaterialExpressionPanner.h"
+#include "Materials/MaterialExpressionComponentMask.h"
+#include "Materials/MaterialExpressionOneMinus.h"
+#include "Materials/MaterialExpressionPower.h"
+#include "Materials/MaterialExpressionSphereMask.h"
+#include "Materials/MaterialExpressionNormalize.h"
+#include "Materials/MaterialExpressionDotProduct.h"
+#include "Materials/MaterialExpressionCrossProduct.h"
+#include "Materials/MaterialExpressionCameraVectorWS.h"
+#include "Materials/MaterialExpressionObjectPositionWS.h"
 
 
 
@@ -145,6 +156,86 @@ MaterialParser::MaterialParser()
 
 	};
 
+	mExprs["MaterialExpressionAdd"] = [&](const TArray<UEdGraphPin*>& inputs, const TArray<UEdGraphPin*>& outputs, UMaterialExpression* expr, UEdGraphPin* pin, std::stringstream&  ss)
+	{
+		auto add = Cast<UMaterialExpressionAdd>(expr);
+
+		if (inputs[0]->LinkedTo.Num() == 0)
+		{
+			ss << add->ConstA;
+		}
+		else
+		{
+			parse(inputs[0]->LinkedTo[0], ss);
+		}
+
+		ss << " + ";
+
+		if (inputs[1]->LinkedTo.Num() == 0)
+		{
+			ss << add->ConstB;
+		}
+		else
+		{
+			parse(inputs[1]->LinkedTo[0], ss);
+		}
+
+	};
+
+	mExprs["MaterialExpressionSubtract"] = [&](const TArray<UEdGraphPin*>& inputs, const TArray<UEdGraphPin*>& outputs, UMaterialExpression* expr, UEdGraphPin* pin, std::stringstream& ss)
+	{
+		auto sub = Cast<UMaterialExpressionSubtract>(expr);
+
+		if (inputs[0]->LinkedTo.Num() == 0)
+		{
+			ss << sub->ConstA;
+		}
+		else
+		{
+			parse(inputs[0]->LinkedTo[0], ss);
+		}
+
+		ss << " - ";
+
+		if (inputs[1]->LinkedTo.Num() == 0)
+		{
+			ss << sub->ConstB;
+		}
+		else
+		{
+			parse(inputs[1]->LinkedTo[0], ss);
+		}
+
+	};
+
+	mExprs["MaterialExpressionDivide"] = [&](const TArray<UEdGraphPin*>& inputs, const TArray<UEdGraphPin*>& outputs, UMaterialExpression* expr, UEdGraphPin* pin, std::stringstream& ss)
+	{
+		auto div = Cast<UMaterialExpressionDivide>(expr);
+
+		if (inputs[0]->LinkedTo.Num() == 0)
+		{
+			ss << div->ConstA;
+		}
+		else
+		{
+			parse(inputs[0]->LinkedTo[0], ss);
+		}
+
+		ss << " / ";
+
+		if (inputs[1]->LinkedTo.Num() == 0)
+		{
+			ss << div->ConstB;
+		}
+		else
+		{
+			parse(inputs[1]->LinkedTo[0], ss);
+		}
+
+	};
+
+	
+
 	mExprs["MaterialExpressionScalarParameter"] = [&overrides = mOverrideScalarParameters](const TArray<UEdGraphPin*>& inputs, const TArray<UEdGraphPin*>& outputs, UMaterialExpression* expr, UEdGraphPin* pin, std::stringstream&  ss)
 	{
 		auto scalar = Cast<UMaterialExpressionScalarParameter>(expr);
@@ -229,31 +320,8 @@ MaterialParser::MaterialParser()
 		const auto& var = constant->Constant;
 		ss << "half4(" << var.R << "," << var.G << "," << var.B << "," << var.B << ")";
 	};
-	mExprs["MaterialExpressionAdd"] = [&](const TArray<UEdGraphPin*>& inputs, const TArray<UEdGraphPin*>& outputs, UMaterialExpression* expr, UEdGraphPin* pin, std::stringstream&  ss)
-	{
-		auto add = Cast<UMaterialExpressionAdd>(expr);
 
-		if (inputs[0]->LinkedTo.Num() == 0)
-		{
-			ss << add->ConstA;
-		}
-		else
-		{
-			parse(inputs[0]->LinkedTo[0], ss);
-		}
 
-		ss << " + ";
-
-		if (inputs[1]->LinkedTo.Num() == 0)
-		{
-			ss << add->ConstB;
-		}
-		else
-		{
-			parse(inputs[1]->LinkedTo[0], ss);
-		}
-
-	};
 	mExprs["MaterialExpressionTextureCoordinate"] = [](const TArray<UEdGraphPin*>& inputs, const TArray<UEdGraphPin*>& outputs, UMaterialExpression* expr, UEdGraphPin* pin, std::stringstream&  ss)
 	{
 		auto tc = Cast<UMaterialExpressionTextureCoordinate>(expr);
@@ -340,6 +408,157 @@ MaterialParser::MaterialParser()
 			ss << ".a";
 		}
 	};
+	mExprs["MaterialExpressionPanner"] = [&](const TArray<UEdGraphPin*>& inputs, const TArray<UEdGraphPin*>& outputs, UMaterialExpression* expr, UEdGraphPin* pin, std::stringstream& ss)
+	{
+		auto panner = Cast<UMaterialExpressionPanner>(expr);
+		
+		std::string uv = "input.uv";
+		if (inputs[0]->LinkedTo.Num() != 0)
+		{
+			std::stringstream uvparser;
+			parse(inputs[0]->LinkedTo[0], uvparser);
+			uv = uvparser.str();
+		}
+
+		std::string time = "deltatime";
+		if (inputs[1]->LinkedTo.Num() != 0)
+		{
+			std::stringstream timeparser;
+			parse(inputs[1]->LinkedTo[0], timeparser);
+			time = timeparser.str();
+		}
+
+		std::string speed = Common::format("half2(", panner->SpeedX, ",",panner->SpeedY,")");
+		if (inputs[2]->LinkedTo.Num() != 0)
+		{
+			std::stringstream parser;
+			parse(inputs[2]->LinkedTo[0], parser);
+			speed = parser.str();
+		}
+
+		ss << Common::format(uv, " + ", speed, " * ", time);
+
+	};
+
+	mExprs["MaterialExpressionComponentMask"] = [&](const TArray<UEdGraphPin*>& inputs, const TArray<UEdGraphPin*>& outputs, UMaterialExpression* expr, UEdGraphPin* pin, std::stringstream& ss)
+	{
+		auto mask = Cast<UMaterialExpressionComponentMask>(expr);
+
+		parse(inputs[0]->LinkedTo[0], ss);
+
+		ss << ".";
+
+		if (mask->R)
+			ss << "r";
+		if (mask->G)
+			ss << "g";
+		if (mask->B)
+			ss << "b";
+		if (mask->A)
+			ss << "a";
+	};
+	mExprs["MaterialExpressionOneMinus"] = [&](const TArray<UEdGraphPin*>& inputs, const TArray<UEdGraphPin*>& outputs, UMaterialExpression* expr, UEdGraphPin* pin, std::stringstream& ss)
+	{
+		auto om = Cast<UMaterialExpressionOneMinus>(expr);
+		ss << "1 - ";
+		parse(inputs[0]->LinkedTo[0], ss);
+
+	};
+
+	mExprs["MaterialExpressionPower"] = [&](const TArray<UEdGraphPin*>& inputs, const TArray<UEdGraphPin*>& outputs, UMaterialExpression* expr, UEdGraphPin* pin, std::stringstream& ss)
+	{
+		auto power = Cast<UMaterialExpressionPower>(expr);
+		ss << "power(";
+		parse(inputs[0]->LinkedTo[0], ss);
+
+		ss << ",";
+
+		if (inputs[1]->LinkedTo.Num() > 0)
+			parse(inputs[1]->LinkedTo[0], ss);
+		else
+			ss << power->ConstExponent;
+		
+		ss << ")";
+	};
+	mExprs["MaterialExpressionSphereMask"] = [&](const TArray<UEdGraphPin*>& inputs, const TArray<UEdGraphPin*>& outputs, UMaterialExpression* expr, UEdGraphPin* pin, std::stringstream& ss)
+	{
+		auto sm = Cast<UMaterialExpressionSphereMask>(expr);
+		
+		ss << "power(clamp(";
+		
+		std::string checkpoint;
+		{
+			std::stringstream cp;
+			parse(inputs[0]->LinkedTo[0], cp);
+			checkpoint = cp.str();
+		}
+
+		std::string origin;
+		{
+			std::stringstream op;
+			parse(inputs[1]->LinkedTo[0], op);
+			origin = op.str();
+		}
+
+		std::string radius = Common::format(sm->AttenuationRadius);
+		if (inputs[2]->LinkedTo.Num() > 0)
+		{
+			std::stringstream rp;
+			parse(inputs[2]->LinkedTo[0], rp);
+			radius = rp.str();
+		}
+
+		std::string hardness = Common::format(sm->HardnessPercent * 100.0f + 1.0f);
+		if (inputs[3]->LinkedTo.Num() > 0)
+		{
+			std::stringstream hp;
+			parse(inputs[3]->LinkedTo[0], hp);
+			hardness = hp.str();
+		}
+		ss << Common::format("length(", checkpoint, " - ", origin,")/", radius) << ",0,1), " << hardness << ")";
+
+	};
+	mExprs["MaterialExpressionNormalize"] = [&](const TArray<UEdGraphPin*>& inputs, const TArray<UEdGraphPin*>& outputs, UMaterialExpression* expr, UEdGraphPin* pin, std::stringstream& ss)
+	{
+		auto n = Cast<UMaterialExpressionNormalize>(expr);
+
+		ss << "normalize(";
+		parse(inputs[0]->LinkedTo[0], ss);
+		ss << ")";
+	};
+	mExprs["MaterialExpressionCrossProduct"] = [&](const TArray<UEdGraphPin*>& inputs, const TArray<UEdGraphPin*>& outputs, UMaterialExpression* expr, UEdGraphPin* pin, std::stringstream& ss)
+	{
+		auto c = Cast<UMaterialExpressionCrossProduct>(expr);
+
+		ss << "cross(";
+		parse(inputs[0]->LinkedTo[0], ss);
+		ss <<",";
+		parse(inputs[1]->LinkedTo[0], ss);
+		ss << ")";
+	};
+
+	mExprs["MaterialExpressionDotProduct"] = [&](const TArray<UEdGraphPin*>& inputs, const TArray<UEdGraphPin*>& outputs, UMaterialExpression* expr, UEdGraphPin* pin, std::stringstream& ss)
+	{
+		auto d = Cast<UMaterialExpressionDotProduct>(expr);
+
+		ss << "dot(";
+		parse(inputs[0]->LinkedTo[0], ss);
+		ss << ",";
+		parse(inputs[1]->LinkedTo[0], ss);
+		ss << ")";
+	};
+	mExprs["MaterialExpressionCameraVectorWS"] = [&](const TArray<UEdGraphPin*>& inputs, const TArray<UEdGraphPin*>& outputs, UMaterialExpression* expr, UEdGraphPin* pin, std::stringstream& ss)
+	{
+		auto d = Cast<UMaterialExpressionCameraVectorWS>(expr);
+
+		ss << "V";
+	};
+	//mExprs["MaterialExpressionObjectPositionWS"] = [&](const TArray<UEdGraphPin*>& inputs, const TArray<UEdGraphPin*>& outputs, UMaterialExpression* expr, UEdGraphPin* pin, std::stringstream& ss)
+	//{
+	//	auto d = Cast<UMaterialExpressionObjectPositionWS>(expr);
+
+	//	ss << "boundscenter";
+	//};
 	
 }
 
@@ -466,7 +685,8 @@ std::string MaterialParser::operator()(UMaterialInterface* material)
 
 	shader += "sampler pointSampler:register(s0);\n";
 	shader += "sampler linearSampler:register(s1);\n";
-	shader += "sampler anisotropicSampler:register(s2);\n";
+	shader += "sampler linearClamp:register(s2);\n";
+	shader += "sampler anisotropicSampler:register(s3);\n";
 
 	shader += "half4 ps(PSInput input):SV_TARGET \n{\n";
 
@@ -474,6 +694,8 @@ std::string MaterialParser::operator()(UMaterialInterface* material)
 		shader += "	" + d.second + ";\n";
 
 	shader+= ss.str();
+
+	shader += "	half3 V = normalize(campos.xyz - input.worldPos.xyz);\n";
 
 	shader += "#ifdef HAS_NORMALMAP\n";
 	shader += "	half3 _normal = calNormal(Normal.xyz, input.normal.xyz, input.tangent.xyz, input.binormal.xyz);\n";
