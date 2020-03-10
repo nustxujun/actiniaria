@@ -1,8 +1,5 @@
-#include "IPCFrame.h"
-#include "Engine/Common.h"
-#include "Engine/D3DHelper.h"
-
 #include "Core.h"
+#include "IPCFrame.h"
 
 #include "Materials/MaterialInterface.h"
 #include "Materials/Material.h"
@@ -19,19 +16,29 @@
 #include "Engine/MapBuildDataRegistry.h"
 
 #include "MaterialParser.h"
+#include <string>
+#include <regex>
+#include <locale>
+#include <dxgi.h>
 
 
+static std::string convert(const std::wstring& str)
+{
+	std::wstring_convert<std::codecvt<wchar_t, char, std::mbstate_t>>
+		converter(new std::codecvt<wchar_t, char, std::mbstate_t>("CHS"));
+	return converter.to_bytes(str);
+}
 
 void IPCFrame::createMesh(const std::string& name, FStaticMeshRenderData & renderdata)
 {
 
 	auto& mesh = renderdata.LODResources[0];
-	auto numVertices = mesh.GetNumVertices();
+	UINT numVertices = mesh.GetNumVertices();
 	auto& positions = mesh.VertexBuffers.PositionVertexBuffer;
 	auto& colors = mesh.VertexBuffers.ColorVertexBuffer;
 	auto& vertices = mesh.VertexBuffers.StaticMeshVertexBuffer;
 
-	auto vertexstride = (
+	UINT vertexstride = (
 		sizeof(FVector) +  // pos
 		sizeof(FVector2D) + //uv
 		sizeof(FVector) +  // normal
@@ -46,7 +53,7 @@ void IPCFrame::createMesh(const std::string& name, FStaticMeshRenderData & rende
 		memcpy(data, &value, sizeof(value));
 		data += sizeof(value);
 	};
-	for (auto i = 0; i < numVertices; ++i)
+	for (UINT i = 0; i < numVertices; ++i)
 	{
 		FVector pos = positions.VertexPosition(i);
 		FVector2D uv = vertices.GetVertexUV(i, 0);
@@ -72,19 +79,25 @@ void IPCFrame::createMesh(const std::string& name, FStaticMeshRenderData & rende
 	//mVertices = renderer->createBuffer(cacheData.size(), stride, D3D12_HEAP_TYPE_DEFAULT, cacheData.data(), cacheData.size());
 
 	auto& indices = mesh.IndexBuffer;
-	auto numIndices = indices.GetNumIndices();
+	UINT numIndices = indices.GetNumIndices();
 	std::vector<char> indexData;
 	indexData.resize(indices.GetIndexDataSize());
-	auto indexstride = indices.Is32Bit() ? 4 : 2;
+	UINT indexstride = indices.Is32Bit() ? 4 : 2;
 	data = indexData.data();
-	for (auto i = 0; i < numIndices; ++i)
+	for (UINT i = 0; i < numIndices; ++i)
 	{
 		auto index = indices.GetIndex(i);
 		memcpy(data, &index, indexstride);
 		data += indexstride;
 	}
 
-	std::vector<RenderCommand::SubMesh> subs;
+	struct SubMesh
+	{
+		UINT materialIndex;
+		UINT startIndex;
+		UINT numIndices;
+	};
+	std::vector<SubMesh> subs;
 
 	for (auto& s : mesh.Sections)
 	{
@@ -95,8 +108,24 @@ void IPCFrame::createMesh(const std::string& name, FStaticMeshRenderData & rende
 		});
 	}
 
-	rendercmd.createMesh(name,
-		vertexData.data(), vertexData.size(), numVertices, vertexstride, indexData.data(), indexData.size(), numIndices, indexstride, subs);
+	mIPC << "createMesh" << name ;
+	UINT bytesofvertices = (UINT)vertexData.size();
+	mIPC << bytesofvertices << numVertices << vertexstride;
+	mIPC.send(vertexData.data(), bytesofvertices);
+
+	UINT bytesofindices = indexData.size();
+	mIPC << bytesofindices << numIndices << indexstride;
+	mIPC.send(indexData.data(), bytesofindices);
+
+
+	mIPC << (UINT) subs.size();
+
+	for (auto& s: subs)
+		mIPC << s;
+
+
+	//rendercmd.createMesh(name,
+		//vertexData.data(), vertexData.size(), numVertices, vertexstride, indexData.data(), indexData.size(), numIndices, indexstride, subs);
 
 }
 
@@ -130,7 +159,7 @@ void IPCFrame::createStaticMesh(AStaticMeshActor * actor)
 			materials.insert(material->GetName());
 		}
 
-		mats.push_back(U2M(*material->GetName()));
+		mats.push_back(convert(*material->GetName()));
 
 	}
 
@@ -147,19 +176,26 @@ void IPCFrame::createStaticMesh(AStaticMeshActor * actor)
 		else
 		{
 			//dstMesh = StaticMesh::Ptr(new StaticMesh(*mesh->RenderData));
-			createMesh(U2M(*mesh->GetName()), *mesh->RenderData);
+			createMesh(convert(*mesh->GetName()), *mesh->RenderData);
 			meshs.insert(mesh->GetName());
 		}
 	}
 
 	auto world = actor->GetTransform().ToMatrixWithScale().GetTransposed();
 	auto nworld = actor->GetTransform().Inverse().ToMatrixWithScale(); // world -> inverse -> transpose -> normal world
-	rendercmd.createModel(U2M(*actor->GetName()), { U2M(*mesh->GetName()) }, *(Matrix*)&world, *(Matrix*)&nworld, mats);
+
+	mIPC << "createModel" << convert(*actor->GetName());
+	mIPC << (UINT)1U << convert(*mesh->GetName()) << world << nworld;
+	mIPC << (UINT) mats.size();
+	for (auto& m: mats)
+		mIPC << m;
+
+	//rendercmd.createModel(convert(*actor->GetName()), { convert(*mesh->GetName()) }, *(Matrix*)&world, *(Matrix*)&nworld, mats);
 
 }
 
 
-DXGI_FORMAT convertFormat(ETextureSourceFormat f)
+static DXGI_FORMAT convertFormat(ETextureSourceFormat f)
 {
 	switch (f)
 	{
@@ -168,7 +204,21 @@ DXGI_FORMAT convertFormat(ETextureSourceFormat f)
 	case TSF_RGBA16:return DXGI_FORMAT_R16G16B16A16_UNORM;
 	case TSF_RGBA16F:return DXGI_FORMAT_R16G16B16A16_FLOAT;
 	default:
-		Common::Assert(false, "unsupported ue4 texture format");
+		assert(0 && "unsupported ue4 texture format");
+		return DXGI_FORMAT_UNKNOWN;
+	}
+}
+
+static UINT sizeof_format(ETextureSourceFormat f)
+{
+	switch (f)
+	{
+	case TSF_G8:return 1U;
+	case TSF_BGRA8:return 4U;
+	case TSF_RGBA16:return 8U;
+	case TSF_RGBA16F:return 8U;
+	default:
+		assert(0 && "unsupported ue4 texture format");
 		return DXGI_FORMAT_UNKNOWN;
 	}
 }
@@ -197,7 +247,7 @@ std::string mapTextureType(TEnumAsByte<enum EMaterialSamplerType> type)
 
 void IPCFrame::createMaterial( UMaterialInterface* material, std::set<std::string>& textureMap)
 {
-	std::string name = U2M(*material->GetName());
+	std::string name = convert(*material->GetName());
 	auto base = material->GetBaseMaterial();
 	auto toVariable = [](const std::string & str)
 	{
@@ -209,17 +259,6 @@ void IPCFrame::createMaterial( UMaterialInterface* material, std::set<std::strin
 	std::set< std::string> textures;
 	for (auto& expr : base->Expressions)
 	{
-		//{
-		//	const UMaterialExpressionVectorParameter* param = Cast<const UMaterialExpressionVectorParameter>(expr);
-		//	if (param)
-		//	{
-		//		TArray<FMaterialParameterInfo> info;
-		//		TArray<FGuid> id;
-		//		param->GetAllParameterInfo(info, id, nullptr);
-		//		std::string tmpname = TCHAR_TO_ANSI(*info[0].Name.ToString());
-		//		parameters[tmpname] = *(Vector4*)&param->DefaultValue;
-		//	}
-		//}
 		{
 			const UMaterialExpressionTextureSample* param = Cast<const UMaterialExpressionTextureSample>(expr);
 			if (param)
@@ -234,11 +273,15 @@ void IPCFrame::createMaterial( UMaterialInterface* material, std::set<std::strin
 
 				uint32 BytesPerPixel = source.GetBytesPerPixel();
 
-				std::string texturename = toVariable(U2M(*t->GetName()));
+				std::string texturename = toVariable(convert(*t->GetName()));
 				if (textureMap.find(texturename) == textureMap.end())
 				{
 					auto src = source.LockMip(0);
-					rendercmd.createTexture(texturename, width, height, convertFormat(format), (bool)t->SRGB,src);
+					auto size = sizeof_format(format) * width * height;
+					mIPC << "createTexture" << texturename << width << height << convertFormat(format) << (bool)t->SRGB << size;
+					mIPC.send(src, size);
+					
+					//rendercmd.createTexture(texturename, width, height, convertFormat(format), (bool)t->SRGB,src);
 					source.UnlockMip(0);
 				}
 				textureMap.insert(texturename);
@@ -247,13 +290,18 @@ void IPCFrame::createMaterial( UMaterialInterface* material, std::set<std::strin
 		}
 	}
 	MaterialParser parser;
-	rendercmd.createMaterial(name,"shaders/scene_vs.hlsl", name + "_ps", parser(material),textures);
+	mIPC << "createMaterial" << name << "shaders/scene_vs.hlsl" << name + "_ps" << parser(material);
+	mIPC << (UINT) textures.size();
+	for (auto& t: textures)
+		mIPC << t;
+	//rendercmd.createMaterial(name,"shaders/scene_vs.hlsl", name + "_ps", parser(material),textures);
 
 }
 
-void IPCFrame::createSkySphere(const std::string & name, const std::string & meshname, const std::string & mat, const Matrix& tran)
+void IPCFrame::createSkySphere(const std::string & name, const std::string & meshname, const std::string & mat, const FMatrix& tran)
 {
-	rendercmd.createSky(name, meshname, mat, tran);
+	mIPC << "createSky" << name << meshname << mat << tran;
+	//rendercmd.createSky(name, meshname, mat, tran);
 }
 
 IPCFrame::IPCFrame()
@@ -268,7 +316,7 @@ IPCFrame::IPCFrame()
 	//	std::cout << "console started." << std::endl;
 	//}
 	//FString path = GetPluginPath() + "/Source/actiniaria/Private/engine/";
-	rendercmd.init(true);
+	mIPC.listen("renderstation");
 }
 
 IPCFrame::~IPCFrame()
@@ -283,7 +331,10 @@ void IPCFrame::iterateLights()
 		auto dir = light->GetTransform().ToMatrixNoScale().TransformFVector4(FVector4{1,0,0,0});
 		auto brightness = light->GetBrightness();
 		auto color = light->GetLightColor() * brightness;
-		rendercmd.createLight(U2M(*light->GetName()),0,*(Color*)&color, *(Vector3*)&dir);
+
+		mIPC << "createLight" << convert(*light->GetName()) << UINT(0) << color << FVector(dir);
+		//rendercmd.createLight(convert(*light->GetName()),0,*(Color*)&color, *(Vector3*)&dir);
+
 	}
 
 }
@@ -301,14 +352,26 @@ void IPCFrame::iterateCapture()
 			continue;
 		auto transfrom = comp->GetComponentTransform();
 		auto mat = transfrom.ToMatrixWithScale().GetTransposed();
-		rendercmd.createReflectionProbe(
-			U2M(*actor->GetName()),
-			*(Matrix*)&mat,
-			comp->GetInfluenceBoundingRadius(),
-			data->Brightness,data->CubemapSize, 
-			data->FullHDRCapturedData.GetData(), 
-			data->FullHDRCapturedData.Num()
-		);
+
+
+		mIPC
+			<< "createReflectionProbe" 
+			<< convert(*actor->GetName()) 
+			<< mat 
+			<< comp->GetInfluenceBoundingRadius() 
+			<< data->Brightness 
+			<< (UINT)data->CubemapSize;
+		UINT size = data->FullHDRCapturedData.Num();
+		mIPC << size;
+		mIPC.send(data->FullHDRCapturedData.GetData(), size);
+		//rendercmd.createReflectionProbe(
+		//	convert(*actor->GetName()),
+		//	*(Matrix*)&mat,
+		//	comp->GetInfluenceBoundingRadius(),
+		//	data->Brightness,data->CubemapSize, 
+		//	data->FullHDRCapturedData.GetData(), 
+		//	data->FullHDRCapturedData.Num()
+		//);
 	}
 }
 
@@ -317,7 +380,7 @@ void IPCFrame::init()
 	iterateObjects();
 	iterateLights();
 	iterateCapture();
-	rendercmd.done();
+	mIPC << "done";
 }
 
 void IPCFrame::iterateObjects()
@@ -325,7 +388,7 @@ void IPCFrame::iterateObjects()
 
 	{
 		auto camIter = TObjectIterator<ACameraActor>();
-		Common::Assert(!!camIter, "need camera");
+		assert(!!camIter && "need camera");
 		auto camact = *camIter;
 		auto camcom = camact->GetCameraComponent();
 		FMinimalViewInfo info;
@@ -353,7 +416,21 @@ void IPCFrame::iterateObjects()
 		auto view = FTranslationMatrix(-camact->GetTransform().GetLocation()) * rotmat;
 		view = view.GetTransposed();
 
-		rendercmd.createCamera("main",{pos.X, pos.Y, pos.Z}, {dir.X, dir.Y, dir.Z}, *(Matrix*)&view, *(Matrix*)&proj, { 0,0, width , height, 0.0f, 1.0f });
+		mIPC 
+			<< "createCamera" 
+			<< "main" 
+			<< FVector(pos)
+			<< FVector(dir)
+			<< view 
+			<< proj 
+			<< 0.0f 
+			<< 0.0f 
+			<< width 
+			<< height 
+			<< 0.0f
+			<< 1.0f;
+
+		//rendercmd.createCamera("main",{pos.X, pos.Y, pos.Z}, {dir.X, dir.Y, dir.Z}, *(Matrix*)&view, *(Matrix*)&proj, { 0,0, width , height, 0.0f, 1.0f });
 
 	}
 
@@ -411,13 +488,13 @@ void IPCFrame::iterateObjects()
 			else
 			{
 				//dstMesh = StaticMesh::Ptr(new StaticMesh(*mesh->RenderData));
-				createMesh(U2M(*mesh->GetName()), *mesh->RenderData);
+				createMesh(convert(*mesh->GetName()), *mesh->RenderData);
 				meshs.insert(mesh->GetName());
 			}
 		}
 
 		auto world = actor->GetTransform().ToMatrixWithScale().GetTransposed();
-		createSkySphere(U2M(*actor->GetName()), U2M(*mesh->GetName()), U2M(*material->GetName()),*(Matrix*)&world);
+		createSkySphere(convert(*actor->GetName()), convert(*mesh->GetName()), convert(*material->GetName()), world);
 
 	}
 

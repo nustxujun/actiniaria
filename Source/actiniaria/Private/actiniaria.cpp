@@ -8,7 +8,6 @@
 
 #include "LevelEditor.h"
 #include "IPCFrame.h"
-#include "ActiniariaFrame.h"
 #include <thread>
 
 
@@ -88,13 +87,8 @@ void FactiniariaModule::PluginButtonClicked()
 	//while(true)
 	{
 		IPCFrame frame;
-		std::thread thread([&](){
-			frame.rendercmd.record();
-		});
 		frame.init();
-		frame.rendercmd.invalidSelf();
 
-		thread.join();
 	}
 
 }

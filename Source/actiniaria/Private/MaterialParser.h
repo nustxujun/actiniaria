@@ -1,6 +1,12 @@
 #pragma once
-#include "Engine/Renderer.h"
+
+#include "Core.h"
+
+#include <map>
+#include <functional>
 #include "Materials/MaterialInterface.h"
+#include "Materials/MaterialInstance.h"
+
 #include <sstream>
 
 class MaterialParser

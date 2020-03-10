@@ -45,10 +45,39 @@
 #include "Kismet2/BlueprintEditorUtils.h"
 
 #include <regex>
+#include "Windows/MinWindows.h"
 
 
+static std::string format()
+{
+	return {};
+}
 
-std::string tostring(const FVector4& v)
+template<class T, class ... Args>
+static std::string format(const T& v, Args&& ... args)
+{
+	std::stringstream ss;
+	ss << v << format(args...);
+	return ss.str();
+}
+
+static void Assert(bool v, const std::string& msg)
+{
+	if (!v)
+	{
+		::MessageBoxA(NULL,msg.c_str(), NULL,NULL);
+	}
+}
+
+static std::string convertToMulti(const std::wstring& str)
+{
+	std::wstring_convert<std::codecvt<wchar_t, char, std::mbstate_t>>
+		converter(new std::codecvt<wchar_t, char, std::mbstate_t>("CHS"));
+	return converter.to_bytes(str);
+}
+
+
+static std::string tostring(const FVector4& v)
 {
 	std::stringstream ss;
 	ss << "half4(" << v.X << "," << v.Y << "," << v.Z << "," << v.W << ")";
@@ -263,7 +292,7 @@ MaterialParser::MaterialParser()
 		// bind resource
 		if (res.find(texture) == res.end())
 		{
-			res[texture] = "Texture2D " + toVariable(U2M(*texture));
+			res[texture] = "Texture2D " + toVariable(convertToMulti(*texture));
 		}
 
 
@@ -278,10 +307,10 @@ MaterialParser::MaterialParser()
 				uv = uvparser.str();
 			}
 
-			def[name] = "half4 " + U2M(*name) + " = " + toVariable(U2M(*texture)) + ".Sample(anisotropicSampler," + uv + ")";
+			def[name] = "half4 " + convertToMulti(*name) + " = " + toVariable(convertToMulti(*texture)) + ".Sample(anisotropicSampler," + uv + ")";
 		}
 
-		ss << U2M(*name);
+		ss << convertToMulti(*name);
 
 		if (pin->PinName == "R")
 		{
@@ -384,7 +413,7 @@ MaterialParser::MaterialParser()
 	mExprs["MaterialExpressionMaterialFunctionCall"] = [&](const TArray<UEdGraphPin*>& inputs, const TArray<UEdGraphPin*>& outputs, UMaterialExpression* expr, UEdGraphPin* pin, std::stringstream&  ss)
 	{
 		auto fc = Cast<UMaterialExpressionMaterialFunctionCall>(expr);
-		Common::Assert(0, "no impl");
+		Assert(0, "no impl");
 	};
 	mExprs["MaterialExpressionVertexColor"] = [&](const TArray<UEdGraphPin*>& inputs, const TArray<UEdGraphPin*>& outputs, UMaterialExpression* expr, UEdGraphPin* pin, std::stringstream& ss)
 	{
@@ -428,7 +457,7 @@ MaterialParser::MaterialParser()
 			time = timeparser.str();
 		}
 
-		std::string speed = Common::format("half2(", panner->SpeedX, ",",panner->SpeedY,")");
+		std::string speed = format("half2(", panner->SpeedX, ",",panner->SpeedY,")");
 		if (inputs[2]->LinkedTo.Num() != 0)
 		{
 			std::stringstream parser;
@@ -436,7 +465,7 @@ MaterialParser::MaterialParser()
 			speed = parser.str();
 		}
 
-		ss << Common::format(uv, " + ", speed, " * ", time);
+		ss << format(uv, " + ", speed, " * ", time);
 
 	};
 
@@ -500,7 +529,7 @@ MaterialParser::MaterialParser()
 			origin = op.str();
 		}
 
-		std::string radius = Common::format(sm->AttenuationRadius);
+		std::string radius = format(sm->AttenuationRadius);
 		if (inputs[2]->LinkedTo.Num() > 0)
 		{
 			std::stringstream rp;
@@ -508,14 +537,14 @@ MaterialParser::MaterialParser()
 			radius = rp.str();
 		}
 
-		std::string hardness = Common::format(sm->HardnessPercent * 100.0f + 1.0f);
+		std::string hardness = format(sm->HardnessPercent * 100.0f + 1.0f);
 		if (inputs[3]->LinkedTo.Num() > 0)
 		{
 			std::stringstream hp;
 			parse(inputs[3]->LinkedTo[0], hp);
 			hardness = hp.str();
 		}
-		ss << Common::format("length(", checkpoint, " - ", origin,")/", radius) << ",0,1), " << hardness << ")";
+		ss << format("length(", checkpoint, " - ", origin,")/", radius) << ",0,1), " << hardness << ")";
 
 	};
 	mExprs["MaterialExpressionNormalize"] = [&](const TArray<UEdGraphPin*>& inputs, const TArray<UEdGraphPin*>& outputs, UMaterialExpression* expr, UEdGraphPin* pin, std::stringstream& ss)
@@ -612,8 +641,8 @@ std::string MaterialParser::operator()(UMaterialInterface* material)
 	};
 	std::map<FString, Requirement> required;
 	
-	required["Roughness"] = {false, "half", Common::format(base->Roughness.Constant)};
-	required["Metallic"] = { false, "half", Common::format(base->Metallic.Constant) };
+	required["Roughness"] = {false, "half", format(base->Roughness.Constant)};
+	required["Metallic"] = { false, "half", format(base->Metallic.Constant) };
 	required["Emissive Color"] = { false, "half3", "0.0f" };
 
 
@@ -639,7 +668,7 @@ std::string MaterialParser::operator()(UMaterialInterface* material)
 			case MCT_Float3: var += "half3 "; trailer = ".rgb"; break;
 			case MCT_Float4: var += "half4 "; trailer = ".rgba"; break;
 			default: 
-				Common::Assert(false, "unsupported type");
+				Assert(false, "unsupported type");
 			}
 
 			auto name = graph->MaterialInputs[Index].GetName().ToString();
@@ -650,7 +679,7 @@ std::string MaterialParser::operator()(UMaterialInterface* material)
 				required[name].exist = true;
 			}
 
-			ss << U2M(*var) << " = ";
+			ss << convertToMulti(*var) << " = ";
 			parse(InputPins[Index]->LinkedTo[0], ss);
 			ss <<  ";\n";
 		}
@@ -660,7 +689,7 @@ std::string MaterialParser::operator()(UMaterialInterface* material)
 	{
 		if (!r.second.exist)
 		{
-			ss << "	" << r.second.type << " " << U2M(*r.first.Replace(L" ", L"_")) << " = " << r.second.value << ";\n";
+			ss << "	" << r.second.type << " " << convertToMulti(*r.first.Replace(L" ", L"_")) << " = " << r.second.value << ";\n";
 		}
 	}
 
@@ -733,6 +762,6 @@ void MaterialParser::parse(UEdGraphPin * pin, std::stringstream & ss)
 		ss << ")";
 	}
 	else
-		Common::Assert(false, "cannot parse expression: " + (U2M(*name.ToString())));
+		Assert(false, "cannot parse expression: " + (convertToMulti(*name.ToString())));
 
 }

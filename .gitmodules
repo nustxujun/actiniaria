@@ -1,3 +1,3 @@
-[submodule "Source/actiniaria/Private/engine"]
-	path = Source/actiniaria/Private/engine
-	url = https://github.com/nustxujun/hermitcrab.git
+[submodule "Source/actiniaria/Private/nautiloidea"]
+	path = Source/actiniaria/Private/nautiloidea
+	url = https://github.com/nustxujun/nautiloidea.git
