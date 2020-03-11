@@ -31,6 +31,9 @@
 #include "Materials/MaterialExpressionCrossProduct.h"
 #include "Materials/MaterialExpressionCameraVectorWS.h"
 #include "Materials/MaterialExpressionObjectPositionWS.h"
+#include "Materials/MaterialExpressionObjectRadius.h"
+#include "Materials/MaterialExpressionTime.h"
+#include "Materials/MaterialExpressionWorldPosition.h"
 
 
 
@@ -357,7 +360,7 @@ MaterialParser::MaterialParser()
 		ss << "input.uv";
 		if (tc->CoordinateIndex > 0)
 		{
-			ss << tc->CoordinateIndex;
+			//ss << tc->CoordinateIndex;
 		}
 
 		ss << " * half2(" << tc->UTiling << "," << tc->VTiling<< ")";
@@ -497,7 +500,7 @@ MaterialParser::MaterialParser()
 	mExprs["MaterialExpressionPower"] = [&](const TArray<UEdGraphPin*>& inputs, const TArray<UEdGraphPin*>& outputs, UMaterialExpression* expr, UEdGraphPin* pin, std::stringstream& ss)
 	{
 		auto power = Cast<UMaterialExpressionPower>(expr);
-		ss << "power(";
+		ss << "pow(";
 		parse(inputs[0]->LinkedTo[0], ss);
 
 		ss << ",";
@@ -513,7 +516,7 @@ MaterialParser::MaterialParser()
 	{
 		auto sm = Cast<UMaterialExpressionSphereMask>(expr);
 		
-		ss << "power(clamp(";
+		ss << "pow(clamp(";
 		
 		std::string checkpoint;
 		{
@@ -553,7 +556,7 @@ MaterialParser::MaterialParser()
 
 		ss << "normalize(";
 		parse(inputs[0]->LinkedTo[0], ss);
-		ss << ")";
+		ss << ".xyz)";
 	};
 	mExprs["MaterialExpressionCrossProduct"] = [&](const TArray<UEdGraphPin*>& inputs, const TArray<UEdGraphPin*>& outputs, UMaterialExpression* expr, UEdGraphPin* pin, std::stringstream& ss)
 	{
@@ -561,9 +564,9 @@ MaterialParser::MaterialParser()
 
 		ss << "cross(";
 		parse(inputs[0]->LinkedTo[0], ss);
-		ss <<",";
+		ss <<".xyz,";
 		parse(inputs[1]->LinkedTo[0], ss);
-		ss << ")";
+		ss << ".xyz)";
 	};
 
 	mExprs["MaterialExpressionDotProduct"] = [&](const TArray<UEdGraphPin*>& inputs, const TArray<UEdGraphPin*>& outputs, UMaterialExpression* expr, UEdGraphPin* pin, std::stringstream& ss)
@@ -572,23 +575,38 @@ MaterialParser::MaterialParser()
 
 		ss << "dot(";
 		parse(inputs[0]->LinkedTo[0], ss);
-		ss << ",";
+		ss << ".xyz,";
 		parse(inputs[1]->LinkedTo[0], ss);
-		ss << ")";
+		ss << ".xyz)";
 	};
 	mExprs["MaterialExpressionCameraVectorWS"] = [&](const TArray<UEdGraphPin*>& inputs, const TArray<UEdGraphPin*>& outputs, UMaterialExpression* expr, UEdGraphPin* pin, std::stringstream& ss)
 	{
-		auto d = Cast<UMaterialExpressionCameraVectorWS>(expr);
+		//auto d = Cast<UMaterialExpressionCameraVectorWS>(expr);
 
 		ss << "V";
 	};
-	//mExprs["MaterialExpressionObjectPositionWS"] = [&](const TArray<UEdGraphPin*>& inputs, const TArray<UEdGraphPin*>& outputs, UMaterialExpression* expr, UEdGraphPin* pin, std::stringstream& ss)
-	//{
-	//	auto d = Cast<UMaterialExpressionObjectPositionWS>(expr);
+	mExprs["MaterialExpressionObjectPositionWS"] = [&](const TArray<UEdGraphPin*>& inputs, const TArray<UEdGraphPin*>& outputs, UMaterialExpression* expr, UEdGraphPin* pin, std::stringstream& ss)
+	{
+		ss << "objpos";
+	};
 
-	//	ss << "boundscenter";
-	//};
-	
+	mExprs["MaterialExpressionObjectRadius"] = [&](const TArray<UEdGraphPin*>& inputs, const TArray<UEdGraphPin*>& outputs, UMaterialExpression* expr, UEdGraphPin* pin, std::stringstream& ss)
+	{
+		ss << "objradius";
+	};
+
+	mExprs["MaterialExpressionWorldPosition"] = [&, &def = mDefinations](const TArray<UEdGraphPin*>& inputs, const TArray<UEdGraphPin*>& outputs, UMaterialExpression* expr, UEdGraphPin* pin, std::stringstream& ss)
+	{
+		ss << "input.worldPos.xyz";
+	};
+	mExprs["MaterialExpressionTime"] = [&, &def = mDefinations](const TArray<UEdGraphPin*>& inputs, const TArray<UEdGraphPin*>& outputs, UMaterialExpression* expr, UEdGraphPin* pin, std::stringstream& ss)
+	{
+		auto t = Cast<UMaterialExpressionTime>(expr);
+		if (t->bOverride_Period)
+			ss << "fmod(time, "  << t->Period << ")";
+		else
+			ss << "time";
+	};
 }
 
 std::string MaterialParser::operator()(UMaterialInterface* material)
@@ -641,6 +659,7 @@ std::string MaterialParser::operator()(UMaterialInterface* material)
 	};
 	std::map<FString, Requirement> required;
 	
+	required["Base Color"] = { false, "half3", "0.0f" };
 	required["Roughness"] = {false, "half", format(base->Roughness.Constant)};
 	required["Metallic"] = { false, "half", format(base->Metallic.Constant) };
 	required["Emissive Color"] = { false, "half3", "0.0f" };
@@ -718,13 +737,13 @@ std::string MaterialParser::operator()(UMaterialInterface* material)
 	shader += "sampler anisotropicSampler:register(s3);\n";
 
 	shader += "half4 ps(PSInput input):SV_TARGET \n{\n";
+	shader += "	half3 V = normalize(campos.xyz - input.worldPos.xyz);\n";
 
 	for(auto& d: mDefinations)
 		shader += "	" + d.second + ";\n";
 
 	shader+= ss.str();
 
-	shader += "	half3 V = normalize(campos.xyz - input.worldPos.xyz);\n";
 
 	shader += "#ifdef HAS_NORMALMAP\n";
 	shader += "	half3 _normal = calNormal(Normal.xyz, input.normal.xyz, input.tangent.xyz, input.binormal.xyz);\n";

@@ -1,5 +1,6 @@
-#include "Core.h"
 #include "IPCFrame.h"
+
+#include "Core.h"
 
 #include "Materials/MaterialInterface.h"
 #include "Materials/Material.h"
@@ -184,8 +185,12 @@ void IPCFrame::createStaticMesh(AStaticMeshActor * actor)
 	auto world = actor->GetTransform().ToMatrixWithScale().GetTransposed();
 	auto nworld = actor->GetTransform().Inverse().ToMatrixWithScale(); // world -> inverse -> transpose -> normal world
 
+	FVector center;
+	FVector extent;
+	actor->GetActorBounds(false,center, extent);
+
 	mIPC << "createModel" << convert(*actor->GetName());
-	mIPC << (UINT)1U << convert(*mesh->GetName()) << world << nworld;
+	mIPC << (UINT)1U << convert(*mesh->GetName()) << world << nworld << center << extent;
 	mIPC << (UINT) mats.size();
 	for (auto& m: mats)
 		mIPC << m;
