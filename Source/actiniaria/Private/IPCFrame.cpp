@@ -499,8 +499,11 @@ void IPCFrame::iterateObjects()
 		}
 
 		auto world = actor->GetTransform().ToMatrixWithScale().GetTransposed();
-		createSkySphere(convert(*actor->GetName()), convert(*mesh->GetName()), convert(*material->GetName()), world);
+		FVector center;
+		FVector extent;
+		actor->GetActorBounds(false, center, extent);
 
+		mIPC << "createSky" << convert(*actor->GetName()) << convert(*mesh->GetName()) << convert(*material->GetName()) << world << center << extent;
 	}
 
 }

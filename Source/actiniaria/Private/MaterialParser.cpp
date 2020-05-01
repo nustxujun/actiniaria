@@ -34,6 +34,7 @@
 #include "Materials/MaterialExpressionObjectRadius.h"
 #include "Materials/MaterialExpressionTime.h"
 #include "Materials/MaterialExpressionWorldPosition.h"
+#include "Materials/MaterialExpressionCameraPositionWS.h"
 
 
 
@@ -382,7 +383,7 @@ MaterialParser::MaterialParser()
 		ss << ", ";
 		if (inputs[2]->LinkedTo.Num() == 0)
 		{
-			ss << clamp->MinDefault;
+			ss << clamp->MaxDefault;
 		}
 		else
 		{
@@ -516,21 +517,30 @@ MaterialParser::MaterialParser()
 	{
 		auto sm = Cast<UMaterialExpressionSphereMask>(expr);
 		
-		ss << "pow(clamp(";
-		
-		std::string checkpoint;
+		std::string hardness = format(sm->HardnessPercent *0.01f);
+		if (inputs[3]->LinkedTo.Num() > 0)
 		{
-			std::stringstream cp;
-			parse(inputs[0]->LinkedTo[0], cp);
-			checkpoint = cp.str();
+			std::stringstream hp;
+			parse(inputs[3]->LinkedTo[0], hp);
+			hardness = hp.str() + " * 0.01f";
 		}
 
+		
 		std::string origin;
 		{
 			std::stringstream op;
-			parse(inputs[1]->LinkedTo[0], op);
+			parse(inputs[0]->LinkedTo[0], op);
 			origin = op.str();
 		}
+
+		std::string checkpoint;
+		{
+			std::stringstream cp;
+			parse(inputs[1]->LinkedTo[0], cp);
+			checkpoint = cp.str();
+		}
+
+
 
 		std::string radius = format(sm->AttenuationRadius);
 		if (inputs[2]->LinkedTo.Num() > 0)
@@ -539,15 +549,16 @@ MaterialParser::MaterialParser()
 			parse(inputs[2]->LinkedTo[0], rp);
 			radius = rp.str();
 		}
-
-		std::string hardness = format(sm->HardnessPercent * 100.0f + 1.0f);
-		if (inputs[3]->LinkedTo.Num() > 0)
+		if (hardness == "1" || hardness == "1.0")
 		{
-			std::stringstream hp;
-			parse(inputs[3]->LinkedTo[0], hp);
-			hardness = hp.str();
+			ss <<  "1- floor(clamp(" <<format("length(", checkpoint, " - ", origin, ")/", radius) << ",0,1))";
 		}
-		ss << format("length(", checkpoint, " - ", origin,")/", radius) << ",0,1), " << hardness << ")";
+		else
+		{
+			ss << "clamp("<< hardness << "1 / (1 - " << hardness << ") * (1.0f - clamp(";
+			ss << format("length(", checkpoint, " - ", origin, ")/", radius) << ",0,1.0f))" << ",0,1.0f)";
+		}
+
 
 	};
 	mExprs["MaterialExpressionNormalize"] = [&](const TArray<UEdGraphPin*>& inputs, const TArray<UEdGraphPin*>& outputs, UMaterialExpression* expr, UEdGraphPin* pin, std::stringstream& ss)
@@ -585,6 +596,12 @@ MaterialParser::MaterialParser()
 
 		ss << "V";
 	};
+	mExprs["MaterialExpressionCameraPositionWS"] = [&](const TArray<UEdGraphPin*>& inputs, const TArray<UEdGraphPin*>& outputs, UMaterialExpression* expr, UEdGraphPin* pin, std::stringstream& ss)
+	{
+		//auto d = Cast<MaterialExpressionCameraPositionWS>(expr);
+
+		ss << "campos";
+	};
 	mExprs["MaterialExpressionObjectPositionWS"] = [&](const TArray<UEdGraphPin*>& inputs, const TArray<UEdGraphPin*>& outputs, UMaterialExpression* expr, UEdGraphPin* pin, std::stringstream& ss)
 	{
 		ss << "objpos";
@@ -621,12 +638,12 @@ std::string MaterialParser::operator()(UMaterialInterface* material)
 	{
 		for (auto& vp : instance->VectorParameterValues)
 		{
-			mOverrideVectorParameters[vp.ParameterName_DEPRECATED] = &vp;
+			mOverrideVectorParameters[vp.ParameterInfo.Name] = &vp;
 		}
 
 		for (auto& vp : instance->ScalarParameterValues)
 		{
-			mOverrideScalarParameters[vp.ParameterName_DEPRECATED] = &vp;
+			mOverrideScalarParameters[vp.ParameterInfo.Name] = &vp;
 		}
 	}
 
